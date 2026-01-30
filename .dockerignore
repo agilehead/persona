@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Node modules (rebuilt in container)
+node_modules
+**/node_modules
+
+# Build artifacts (rebuilt in container)
+**/dist
+
+# Test directories
+**/.tests
+**/.temp
+**/.analysis
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment files (sensitive)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Development config
+.eslintrc*
+.prettierrc*
+tsconfig*.json
+!tsconfig.base.json
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/tests/
+
+# Logs
+*.log
+logs/

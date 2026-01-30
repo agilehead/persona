@@ -1,0 +1,32 @@
+{
+  "name": "@agilehead/persona-db",
+  "version": "0.0.1",
+  "description": "Database layer for Persona",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix"
+  },
+  "dependencies": {
+    "@agilehead/persona-logger": "file:../persona-logger",
+    "@tinqerjs/tinqer": "0.0.26",
+    "@tinqerjs/better-sqlite3-adapter": "0.0.26",
+    "better-sqlite3": "^11.8.1",
+    "knex": "^3.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.9.2"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  }
+}
