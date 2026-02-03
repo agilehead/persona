@@ -1,6 +1,6 @@
 /**
  * Internal Roles Route
- * POST /internal/user/:userId/roles - Update user roles
+ * PUT /internal/user/:userId/roles - Update user roles
  *
  * Note: Tenant comes from middleware (query param or implicit)
  */
@@ -19,8 +19,8 @@ const UpdateRolesSchema = z.object({
 export function createRolesRoutes(authService: AuthService): Router {
   const router = Router();
 
-  // POST /internal/user/:userId/roles
-  router.post("/user/:userId/roles", async (req: Request, res: Response) => {
+  // PUT /internal/user/:userId/roles
+  router.put("/user/:userId/roles", async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
       const tenantId = req.tenant;

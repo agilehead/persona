@@ -196,7 +196,7 @@ describe("Internal API Routes", () => {
       );
 
       const response = await request(app)
-        .post("/internal/user/role-test-user/roles")
+        .put("/internal/user/role-test-user/roles")
         .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
         .send({ roles: ["user", "moderator", "admin"] });
 
@@ -209,7 +209,7 @@ describe("Internal API Routes", () => {
       const app = createTestApp(singleTenantConfig);
 
       const response = await request(app)
-        .post("/internal/user/some-user/roles")
+        .put("/internal/user/some-user/roles")
         .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
         .send({ roles: [] });
 
@@ -332,7 +332,7 @@ describe("Internal API Routes", () => {
       );
 
       const response = await request(app)
-        .post(`/internal/user/mt-role-user/roles?tenant=${TEST_TENANTS.APP1}`)
+        .put(`/internal/user/mt-role-user/roles?tenant=${TEST_TENANTS.APP1}`)
         .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
         .send({ roles: ["admin"] });
 
