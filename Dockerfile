@@ -50,26 +50,18 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd -r -u 1001 -g root -s /bin/bash persona && \
-    mkdir -p /home/persona && \
-    chown -R persona:root /home/persona
-
 WORKDIR /app
 
 # Copy built application from builder stage
-COPY --from=builder --chown=persona:root /app/node ./node
-COPY --from=builder --chown=persona:root /app/database ./database
-COPY --from=builder --chown=persona:root /app/package*.json ./
-COPY --from=builder --chown=persona:root /app/node_modules ./node_modules
-COPY --from=builder --chown=persona:root /app/knexfile.js ./
+COPY --from=builder /app/node ./node
+COPY --from=builder /app/database ./database
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/knexfile.js ./
 
 # Copy start script and entrypoint
-COPY --chown=persona:root scripts/start.sh scripts/docker-entrypoint.sh ./
+COPY scripts/start.sh scripts/docker-entrypoint.sh ./
 RUN chmod +x start.sh docker-entrypoint.sh
-
-# Switch to non-root user
-USER persona
 
 # Expose server port
 EXPOSE 5005
