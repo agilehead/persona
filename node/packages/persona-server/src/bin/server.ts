@@ -106,7 +106,7 @@ async function main(): Promise<void> {
     });
 
     // Apply tenant middleware to /auth/google (start flow) but NOT to /auth/google/callback
-    app.use("/auth/google", tenantMiddleware, googleRoutes);
+    app.use("/auth", tenantMiddleware, googleRoutes);
     // Callback is handled separately within googleRoutes without tenant middleware
   }
 
