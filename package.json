@@ -13,10 +13,10 @@
     "start": "./scripts/start.sh",
     "test": "cd node/packages/persona-server && npm test",
     "test:grep": "cd node/packages/persona-server && npm run test:grep",
-    "migrate:latest": "knex migrate:latest --knexfile knexfile.js",
-    "migrate:rollback": "knex migrate:rollback --knexfile knexfile.js",
-    "migrate:status": "knex migrate:status --knexfile knexfile.js",
-    "migrate:make": "knex migrate:make --knexfile knexfile.js"
+    "migrate:persona:latest": "knex migrate:latest --knexfile database/persona/knexfile.js",
+    "migrate:persona:rollback": "knex migrate:rollback --knexfile database/persona/knexfile.js",
+    "migrate:persona:status": "knex migrate:status --knexfile database/persona/knexfile.js",
+    "migrate:persona:make": "knex migrate:make --knexfile database/persona/knexfile.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

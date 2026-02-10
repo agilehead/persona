@@ -11,12 +11,9 @@ const logger = createLogger("persona-migrations");
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Migrations are in the database directory at the project root
-// From: node/packages/persona-db/src/migrations.ts
-// To: database/sqlite/migrations
 const MIGRATIONS_DIR = join(
   __dirname,
-  "../../../../database/sqlite/migrations",
+  "../../../../database/persona/migrations",
 );
 
 type MigrationResult = [batchNo: number, log: string[]];

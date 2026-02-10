@@ -39,3 +39,10 @@ coverage/
 
 # Generated files
 src/generated/
+
+# Task management
+.todos/
+.analysis/
+
+# Docker devenv data
+devenv/data/
