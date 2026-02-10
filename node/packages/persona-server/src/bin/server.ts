@@ -9,10 +9,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createLogger } from "@agilehead/persona-logger";
-import {
-  initSQLiteDatabase,
-  closeSQLiteDatabase,
-} from "@agilehead/persona-db";
+import { initSQLiteDatabase, closeSQLiteDatabase } from "@agilehead/persona-db";
 
 import { config } from "../config.js";
 import {
