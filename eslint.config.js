@@ -146,6 +146,7 @@ export default typescript.config(
       "node_modules/**",
       "**/node_modules/**",
       "**/dist/**",
+      "**/generated/**",
       "scripts/**",
     ],
   }

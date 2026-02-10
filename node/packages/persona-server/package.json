@@ -3,7 +3,13 @@
   "version": "0.0.1",
   "description": "OAuth authentication and identity management service",
   "type": "module",
-  "main": "dist/bin/server.js",
+  "main": "./dist/bin/server.js",
+  "exports": {
+    ".": {
+      "import": "./dist/bin/server.js",
+      "types": "./dist/bin/server.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/bin/server.ts",
@@ -11,8 +17,8 @@
     "test": "NODE_OPTIONS='--import tsx' mocha tests/index.ts --timeout 60000",
     "test:grep": "NODE_OPTIONS='--import tsx' mocha tests/index.ts --timeout 60000 --grep",
     "test:build": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "clean": "rm -rf dist"
   },
   "dependencies": {

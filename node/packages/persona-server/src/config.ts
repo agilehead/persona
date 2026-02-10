@@ -1,4 +1,7 @@
 import { join } from "path";
+import { config as dotenvConfig } from "dotenv";
+
+dotenvConfig();
 
 function required(name: string): string {
   const value = process.env[name];
@@ -76,7 +79,7 @@ export const config = {
 
   // Server
   server: {
-    host: optional("PERSONA_SERVER_HOST", "0.0.0.0"),
+    host: required("PERSONA_SERVER_HOST"),
     port: optionalInt("PERSONA_SERVER_PORT", 5005),
     publicUrl: required("PERSONA_SERVER_PUBLIC_URL"),
   },
@@ -107,12 +110,12 @@ export const config = {
 
   // Google OAuth (optional - disabled if not set)
   google:
-    process.env.GOOGLE_OAUTH_CLIENT_ID !== undefined &&
-    process.env.GOOGLE_OAUTH_CLIENT_ID !== ""
+    process.env.PERSONA_GOOGLE_CLIENT_ID !== undefined &&
+    process.env.PERSONA_GOOGLE_CLIENT_ID !== ""
       ? {
-          clientId: required("GOOGLE_OAUTH_CLIENT_ID"),
-          clientSecret: required("GOOGLE_OAUTH_CLIENT_SECRET"),
-          redirectUri: required("GOOGLE_OAUTH_REDIRECT_URI"),
+          clientId: required("PERSONA_GOOGLE_CLIENT_ID"),
+          clientSecret: required("PERSONA_GOOGLE_CLIENT_SECRET"),
+          redirectUri: required("PERSONA_GOOGLE_REDIRECT_URI"),
           issuer: "https://accounts.google.com",
         }
       : undefined,
