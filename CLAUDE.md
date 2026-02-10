@@ -197,11 +197,11 @@ When you encounter linting, type, or test errors, the solution is ALWAYS to fix 
 
 ```bash
 # Check migration status
-npm run migrate:status
+npm run migrate:persona:status
 
 # Run migrations (ONLY when explicitly asked)
-npm run migrate:latest
-npm run migrate:rollback
+npm run migrate:persona:latest
+npm run migrate:persona:rollback
 ```
 
 ### Testing Commands
@@ -254,7 +254,9 @@ persona/
 │       ├── persona-logger/  # Structured logging
 │       └── persona-test-utils/ # Test utilities
 ├── database/                # Migrations
-│   └── sqlite/migrations/   # SQLite migrations
+│   └── persona/
+│       ├── knexfile.js      # Knex configuration
+│       └── migrations/      # SQLite migrations
 ├── scripts/                 # Build and utility scripts
 └── docs/                    # Documentation
 ```

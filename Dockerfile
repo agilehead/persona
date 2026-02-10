@@ -28,7 +28,6 @@ COPY scripts/ ./scripts/
 
 # Copy source code
 COPY tsconfig.base.json ./
-COPY knexfile.js ./
 COPY node ./node
 COPY database ./database
 
@@ -57,7 +56,6 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/database/ ./database/
-COPY --from=builder /app/knexfile.js ./
 COPY --from=builder /app/node/packages/persona-db/dist ./node/packages/persona-db/dist
 COPY --from=builder /app/node/packages/persona-db/package*.json ./node/packages/persona-db/
 COPY --from=builder /app/node/packages/persona-logger/dist ./node/packages/persona-logger/dist
@@ -66,7 +64,7 @@ COPY --from=builder /app/node/packages/persona-logger/package*.json ./node/packa
 # Create data directory
 RUN mkdir -p /app/data
 
-CMD ["./node_modules/.bin/knex", "migrate:latest", "--knexfile", "./knexfile.js", "--env", "production"]
+CMD ["./node_modules/.bin/knex", "migrate:latest", "--knexfile", "database/persona/knexfile.js", "--env", "production"]
 
 # Development stage - hot reload with source mounts
 FROM builder AS development
@@ -107,8 +105,8 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy start script and entrypoint
-COPY scripts/start.sh scripts/docker-entrypoint.sh ./
-RUN chmod +x start.sh docker-entrypoint.sh
+COPY scripts/start.sh scripts/docker-entrypoint.sh ./scripts/
+RUN chmod +x scripts/start.sh scripts/docker-entrypoint.sh
 
 # Create data and log directories
 RUN mkdir -p /app/data /app/logs
@@ -127,4 +125,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:' + (process.env.PERSONA_SERVER_PORT || 5005) + '/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"
 
 # Use entrypoint for automatic setup
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["./scripts/docker-entrypoint.sh"]

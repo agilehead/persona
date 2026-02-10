@@ -14,7 +14,7 @@ export default {
   },
   useNullAsDefault: true,
   migrations: {
-    directory: join(__dirname, "database/sqlite/migrations"),
+    directory: join(__dirname, "migrations"),
     extension: "js",
   },
   pool: {
