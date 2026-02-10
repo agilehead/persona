@@ -4,6 +4,11 @@
  * Imports all test files and runs them with mocha
  */
 
+import { setupGlobalHooks } from "./setup.js";
+
+// Setup global before/after hooks
+setupGlobalHooks();
+
 // Repository tests
 import "./tests/repositories/identity-repository.test.js";
 import "./tests/repositories/session-repository.test.js";
