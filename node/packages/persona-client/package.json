@@ -1,0 +1,36 @@
+{
+  "name": "@agilehead/persona-client",
+  "version": "0.0.2",
+  "description": "Client library for Persona authentication service",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "mocha --exit",
+    "test:grep": "mocha --exit --grep",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/chai": "^5.2.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.5",
+    "chai": "^5.2.1",
+    "mocha": "^11.7.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.2"
+  },
+  "keywords": ["persona", "authentication", "oauth", "client", "api"],
+  "author": "Agilehead",
+  "license": "MIT"
+}
