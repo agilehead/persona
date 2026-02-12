@@ -73,7 +73,7 @@ describe("PersonaClient", () => {
         expect(call.init.method).to.equal("POST");
 
         const headers = call.init.headers as Record<string, string>;
-        expect(headers["X-Internal-Secret"]).to.equal("test-secret");
+        expect(headers["Authorization"]).to.equal("Bearer test-secret");
 
         const body = JSON.parse(call.init.body as string) as Record<
           string,

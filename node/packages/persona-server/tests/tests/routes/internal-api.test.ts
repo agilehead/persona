@@ -70,7 +70,7 @@ describe("Internal API Routes", () => {
       tenants: [TEST_TENANTS.DEFAULT],
     };
 
-    it("should reject requests without X-Internal-Secret header", async () => {
+    it("should reject requests without Authorization header", async () => {
       const app = createTestApp(singleTenantConfig);
 
       const response = await request(app)
@@ -86,7 +86,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .post("/internal/identity/some-id/link")
-        .set("X-Internal-Secret", "wrong-secret")
+        .set("Authorization", "Bearer wrong-secret")
         .send({ userId: "alice", roles: ["user"] });
 
       expect(response.status).to.equal(401);
@@ -100,7 +100,7 @@ describe("Internal API Routes", () => {
       // but it proves authentication passed
       const response = await request(app)
         .post("/internal/identity/non-existent/link")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ userId: "alice", roles: ["user"] });
 
       expect(response.status).to.equal(404); // Not 401
@@ -133,7 +133,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .post(`/internal/identity/${identityId}/link`)
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ userId: "alice", roles: ["user", "admin"] });
 
       expect(response.status).to.equal(200);
@@ -149,7 +149,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .post("/internal/identity/some-id/link")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ userId: "ab", roles: [] }); // userId too short, roles empty
 
       expect(response.status).to.equal(400);
@@ -161,7 +161,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .post("/internal/identity/non-existent-id/link")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ userId: "alice", roles: ["user"] });
 
       expect(response.status).to.equal(404);
@@ -197,7 +197,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .put("/internal/user/role-test-user/roles")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ roles: ["user", "moderator", "admin"] });
 
       expect(response.status).to.equal(200);
@@ -210,7 +210,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .put("/internal/user/some-user/roles")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ roles: [] });
 
       expect(response.status).to.equal(400);
@@ -246,7 +246,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .delete("/internal/user/session-test-user/sessions")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET);
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`);
 
       expect(response.status).to.equal(200);
       expect(response.body.success).to.be.true;
@@ -265,7 +265,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .post("/internal/identity/some-id/link")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ userId: "alice", roles: ["user"] });
 
       expect(response.status).to.equal(400);
@@ -291,7 +291,7 @@ describe("Internal API Routes", () => {
         .post(
           `/internal/identity/${loginResult.data.identity.id}/link?tenant=${TEST_TENANTS.APP1}`,
         )
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ userId: "bob", roles: ["user"] });
 
       expect(response.status).to.equal(200);
@@ -303,7 +303,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .post("/internal/identity/some-id/link?tenant=invalid-tenant")
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ userId: "alice", roles: ["user"] });
 
       expect(response.status).to.equal(400);
@@ -333,7 +333,7 @@ describe("Internal API Routes", () => {
 
       const response = await request(app)
         .put(`/internal/user/mt-role-user/roles?tenant=${TEST_TENANTS.APP1}`)
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET)
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`)
         .send({ roles: ["admin"] });
 
       expect(response.status).to.equal(200);
@@ -365,7 +365,7 @@ describe("Internal API Routes", () => {
         .delete(
           `/internal/user/mt-sess-user/sessions?tenant=${TEST_TENANTS.APP1}`,
         )
-        .set("X-Internal-Secret", TEST_INTERNAL_SECRET);
+        .set("Authorization", `Bearer ${TEST_INTERNAL_SECRET}`);
 
       expect(response.status).to.equal(200);
       expect(response.body.success).to.be.true;
