@@ -20,7 +20,7 @@ export function failure<E = Error>(error: E): Result<never, E> {
 export type PersonaConfig = {
   /** Base URL of the Persona service (e.g., "http://localhost:4005") */
   endpoint: string;
-  /** Secret for X-Internal-Secret header */
+  /** Secret for Authorization: Bearer header */
   internalSecret: string;
   /** Tenant ID for multi-tenant mode (appended as ?tenant=xxx) */
   tenantId?: string;

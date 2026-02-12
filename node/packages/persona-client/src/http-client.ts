@@ -40,7 +40,7 @@ export async function internalRequest<T>(
         method,
         headers: {
           "Content-Type": "application/json",
-          "X-Internal-Secret": secret,
+          Authorization: `Bearer ${secret}`,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: controller.signal,

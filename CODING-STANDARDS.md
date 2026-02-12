@@ -483,9 +483,9 @@ router.post("/internal/identity/:identityId/link", async (req, res) => {
 // Internal API authentication middleware
 export function createInternalAuthMiddleware(internalSecret: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const secret = req.headers["x-internal-secret"];
+    const authHeader = req.headers.authorization;
 
-    if (secret !== internalSecret) {
+    if (authHeader !== `Bearer ${internalSecret}`) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }

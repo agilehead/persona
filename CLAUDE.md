@@ -326,7 +326,7 @@ See `.env.example` for complete list. Key variables:
 ### Authentication
 
 - `PERSONA_JWT_SECRET` - JWT signing secret (REQUIRED)
-- `PERSONA_INTERNAL_SECRET` - Internal API secret (REQUIRED)
+- `PERSONA_INTERNAL_SECRET` - Bearer token for internal API endpoints (REQUIRED)
 - `PERSONA_GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `PERSONA_GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `PERSONA_GOOGLE_REDIRECT_URI` - Google OAuth callback URL
