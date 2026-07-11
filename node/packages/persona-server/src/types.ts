@@ -4,8 +4,7 @@
 
 // Result type for operations
 export type Result<T, E = AppError> =
-  | { success: true; data: T }
-  | { success: false; error: E };
+  { success: true; data: T } | { success: false; error: E };
 
 export const ErrorCode = {
   NOT_FOUND: "NOT_FOUND",

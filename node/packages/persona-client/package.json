@@ -12,7 +12,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "mocha --exit",
@@ -22,15 +24,21 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@types/chai": "^5.2.2",
+    "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^22.10.5",
-    "chai": "^5.2.1",
+    "@types/node": "^26.0.0",
+    "chai": "^6.0.0",
     "mocha": "^11.7.1",
-    "tsx": "^4.19.4",
-    "typescript": "^5.9.2"
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.0"
   },
-  "keywords": ["persona", "authentication", "oauth", "client", "api"],
+  "keywords": [
+    "persona",
+    "authentication",
+    "oauth",
+    "client",
+    "api"
+  ],
   "author": "Agilehead",
   "license": "MIT"
 }

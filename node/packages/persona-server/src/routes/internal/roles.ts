@@ -40,7 +40,7 @@ export function createRolesRoutes(authService: AuthService): Router {
       if (!parseResult.success) {
         res.status(400).json({
           error: "Invalid request body",
-          details: parseResult.error.errors,
+          details: parseResult.error.issues,
         });
         return;
       }
