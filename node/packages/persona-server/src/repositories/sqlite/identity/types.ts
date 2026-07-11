@@ -32,8 +32,8 @@ export function mapIdentityToDomain(row: IdentityRow): Identity {
     providerUserId: row.provider_user_id,
     email: row.email,
     roles,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
   };
 
   if (row.name !== null) {

@@ -14,13 +14,13 @@
   "dependencies": {
     "@agilehead/persona-db": "file:../persona-db",
     "@agilehead/persona-logger": "file:../persona-logger",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^12.11.1",
     "knex": "^3.1.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
-    "@types/node": "^22.10.5",
-    "typescript": "^5.9.2"
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.0"
   },
   "exports": {
     ".": {

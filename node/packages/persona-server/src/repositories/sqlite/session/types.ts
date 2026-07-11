@@ -14,9 +14,9 @@ export function mapSessionToDomain(row: SessionRow): Session {
     identityId: row.identity_id,
     tenantId: row.tenant_id,
     tokenHash: row.token_hash,
-    expiresAt: new Date(row.expires_at as string),
+    expiresAt: new Date(row.expires_at),
     revoked: row.revoked === 1 || row.revoked === true,
-    createdAt: new Date(row.created_at as string),
+    createdAt: new Date(row.created_at),
   };
 
   if (row.ip_address !== null) {

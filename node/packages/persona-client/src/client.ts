@@ -24,9 +24,7 @@ export type PersonaClient = {
   ): Promise<Result<UpdateRolesResponse>>;
 
   /** Revoke all sessions for a user */
-  revokeUserSessions(
-    userId: string,
-  ): Promise<Result<RevokeSessionsResponse>>;
+  revokeUserSessions(userId: string): Promise<Result<RevokeSessionsResponse>>;
 };
 
 export function createPersonaClient(config: PersonaConfig): PersonaClient {

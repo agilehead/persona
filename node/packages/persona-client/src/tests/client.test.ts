@@ -53,11 +53,9 @@ describe("PersonaClient", () => {
         };
 
         const client = createPersonaClient(config);
-        const result = await client.linkIdentityToUser(
-          "id-1",
-          "user-1",
-          ["USER"],
-        );
+        const result = await client.linkIdentityToUser("id-1", "user-1", [
+          "USER",
+        ]);
 
         expect(result.success).to.equal(true);
         if (result.success) {
@@ -160,11 +158,9 @@ describe("PersonaClient", () => {
         };
 
         const client = createPersonaClient(config);
-        const result = await client.linkIdentityToUser(
-          "bad-id",
-          "user-1",
-          ["USER"],
-        );
+        const result = await client.linkIdentityToUser("bad-id", "user-1", [
+          "USER",
+        ]);
 
         expect(result.success).to.equal(false);
         if (!result.success) {
@@ -178,11 +174,9 @@ describe("PersonaClient", () => {
         }) as typeof fetch;
 
         const client = createPersonaClient(config);
-        const result = await client.linkIdentityToUser(
-          "id-1",
-          "user-1",
-          ["USER"],
-        );
+        const result = await client.linkIdentityToUser("id-1", "user-1", [
+          "USER",
+        ]);
 
         expect(result.success).to.equal(false);
         if (!result.success) {

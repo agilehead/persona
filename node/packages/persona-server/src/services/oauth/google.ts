@@ -86,7 +86,7 @@ export function extractUserInfo(
 
   const userInfo: OAuthUserInfo = {
     id: claims.sub,
-    raw: claims as Record<string, unknown>,
+    raw: claims,
   };
 
   if (typeof claims.email === "string") {

@@ -6,8 +6,7 @@ export type Logger = {
 };
 
 export type Result<T, E = Error> =
-  | { success: true; data: T }
-  | { success: false; error: E };
+  { success: true; data: T } | { success: false; error: E };
 
 export function success<T>(data: T): Result<T, never> {
   return { success: true, data };
