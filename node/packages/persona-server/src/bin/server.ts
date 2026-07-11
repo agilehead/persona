@@ -24,6 +24,7 @@ import {
 } from "../middleware/index.js";
 import {
   createGoogleOAuthRoutes,
+  createPasswordAuthRoutes,
   createTokenRoutes,
   createLogoutRoutes,
   createInternalRoutes,
@@ -109,6 +110,21 @@ function startServer(): void {
       // Apply tenant middleware to /auth/google (start flow) but NOT to /auth/google/callback
       app.use("/auth", tenantMiddleware, googleRoutes);
       // Callback is handled separately within googleRoutes without tenant middleware
+    }
+
+    // Dev-only username/password login (only mounted in development; config
+    // gates this fail-closed). Warn via console so the banner is always visible
+    // regardless of LOG_LEVEL — this must never go unnoticed if it is ever on.
+    if (config.devAuth !== undefined) {
+      const passwordRoutes = createPasswordAuthRoutes(authService, {
+        users: config.devAuth.users,
+        isProduction: config.isProduction,
+        cookieDomain: config.auth.cookieDomain,
+      });
+      app.use("/auth", tenantMiddleware, passwordRoutes);
+      console.warn(
+        `WARNING: dev username/password login is ENABLED (${String(config.devAuth.users.length)} user(s)). This must never be on in production.`,
+      );
     }
 
     // Token routes
