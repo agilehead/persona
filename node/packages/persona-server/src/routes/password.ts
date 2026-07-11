@@ -109,9 +109,10 @@ export function createPasswordAuthRoutes(
         isNew,
       });
 
+      // The refresh token is delivered only as an httpOnly cookie, matching the
+      // OAuth flow and /token/refresh — never in the JSON body.
       res.json({
         accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
         expiresIn: tokens.expiresIn,
         identity: {
           id: identity.id,

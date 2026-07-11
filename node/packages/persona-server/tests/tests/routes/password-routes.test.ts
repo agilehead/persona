@@ -97,13 +97,14 @@ describe("Password Routes", () => {
 
       expect(response.status).to.equal(200);
       expect(response.body.accessToken).to.be.a("string");
-      expect(response.body.refreshToken).to.be.a("string");
       expect(response.body.expiresIn).to.be.a("number");
       expect(response.body.identity.id).to.be.a("string");
       expect(response.body.identity.email).to.equal("alice@password.local");
+      // The refresh token must NOT be in the body (httpOnly cookie only).
+      expect(response.body.refreshToken).to.equal(undefined);
     });
 
-    it("sets access_token and refresh_token cookies", async () => {
+    it("sets httpOnly access_token and refresh_token cookies", async () => {
       const app = createTestApp(SINGLE_TENANT_CONFIG);
 
       const response = await request(app)
@@ -112,8 +113,20 @@ describe("Password Routes", () => {
 
       expect(response.status).to.equal(200);
       const cookies = response.headers["set-cookie"] as string[] | undefined;
-      expect(cookies?.some((c) => c.startsWith("access_token="))).to.be.true;
-      expect(cookies?.some((c) => c.startsWith("refresh_token="))).to.be.true;
+      const access = cookies?.find((c) => c.startsWith("access_token="));
+      const refresh = cookies?.find((c) => c.startsWith("refresh_token="));
+      expect(access).to.match(/HttpOnly/i);
+      expect(refresh).to.match(/HttpOnly/i);
+    });
+
+    it("is case-sensitive on the username", async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG);
+
+      const response = await request(app)
+        .post("/auth/login")
+        .send({ username: "Alice", password: "alice-secret" });
+
+      expect(response.status).to.equal(401);
     });
 
     it("returns 401 for a wrong password", async () => {

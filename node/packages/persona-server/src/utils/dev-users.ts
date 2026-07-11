@@ -60,18 +60,31 @@ export function verifyDevUser(
   return timingSafeEqual(expected, actual);
 }
 
+// NODE_ENV values in which dev username/password login is permitted. This is an
+// allowlist (fail-closed): any other value — production, staging, a typo, or an
+// unexpected label — disables dev login even if PERSONA_DEV_USERS is set. An
+// unset NODE_ENV counts as development, matching the rest of the config.
+const DEV_ENVIRONMENTS = new Set(["", "development", "test"]);
+
 /**
- * Resolve the dev-auth config from the raw env value.
+ * Resolve the dev-auth config from the raw env values.
  *
- * Returns `undefined` (login disabled) when no users are configured OR when
- * running in production — dev username/password login is hard-off in prod
- * regardless of whether PERSONA_DEV_USERS is set.
+ * Returns `undefined` (login disabled) unless ALL of the following hold:
+ *   - PERSONA_DEV_USERS is set to a non-empty value,
+ *   - NODE_ENV is a recognized development environment (see DEV_ENVIRONMENTS),
+ *   - at least one valid user was parsed.
+ *
+ * The environment check is fail-closed: dev login is never active in an
+ * environment we do not explicitly recognize as development. Throws (via
+ * parseDevUsers) on a malformed PERSONA_DEV_USERS value.
  */
 export function resolveDevAuth(
   raw: string | undefined,
-  isProduction: boolean,
+  nodeEnv: string | undefined,
 ): { users: DevUser[] } | undefined {
   if (raw === undefined || raw === "") return undefined;
-  if (isProduction) return undefined;
-  return { users: parseDevUsers(raw) };
+  if (!DEV_ENVIRONMENTS.has(nodeEnv ?? "")) return undefined;
+  const users = parseDevUsers(raw);
+  if (users.length === 0) return undefined;
+  return { users };
 }

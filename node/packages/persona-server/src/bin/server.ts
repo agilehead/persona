@@ -112,7 +112,9 @@ function startServer(): void {
       // Callback is handled separately within googleRoutes without tenant middleware
     }
 
-    // Dev-only username/password login (never mounted in production)
+    // Dev-only username/password login (only mounted in development; config
+    // gates this fail-closed). Warn via console so the banner is always visible
+    // regardless of LOG_LEVEL — this must never go unnoticed if it is ever on.
     if (config.devAuth !== undefined) {
       const passwordRoutes = createPasswordAuthRoutes(authService, {
         users: config.devAuth.users,
@@ -120,9 +122,9 @@ function startServer(): void {
         cookieDomain: config.auth.cookieDomain,
       });
       app.use("/auth", tenantMiddleware, passwordRoutes);
-      logger.warn("Dev username/password login is ENABLED", {
-        userCount: config.devAuth.users.length,
-      });
+      console.warn(
+        `WARNING: dev username/password login is ENABLED (${String(config.devAuth.users.length)} user(s)). This must never be on in production.`,
+      );
     }
 
     // Token routes

@@ -96,21 +96,41 @@ describe("dev-users", () => {
 
   describe("resolveDevAuth", () => {
     it("returns undefined when the value is unset", () => {
-      expect(resolveDevAuth(undefined, false)).to.equal(undefined);
+      expect(resolveDevAuth(undefined, "development")).to.equal(undefined);
     });
 
     it("returns undefined when the value is empty", () => {
-      expect(resolveDevAuth("", false)).to.equal(undefined);
+      expect(resolveDevAuth("", "development")).to.equal(undefined);
     });
 
-    it("is hard-off in production even when users are configured", () => {
-      expect(resolveDevAuth("alice:secret", true)).to.equal(undefined);
-    });
-
-    it("parses users outside production", () => {
-      expect(resolveDevAuth("alice:secret", false)).to.deep.equal({
+    it("enables in development", () => {
+      expect(resolveDevAuth("alice:secret", "development")).to.deep.equal({
         users: [{ username: "alice", password: "secret" }],
       });
+    });
+
+    it("enables in test", () => {
+      expect(resolveDevAuth("alice:secret", "test")).to.deep.equal({
+        users: [{ username: "alice", password: "secret" }],
+      });
+    });
+
+    it("enables when NODE_ENV is unset", () => {
+      expect(resolveDevAuth("alice:secret", undefined)).to.deep.equal({
+        users: [{ username: "alice", password: "secret" }],
+      });
+    });
+
+    it("is fail-closed in production", () => {
+      expect(resolveDevAuth("alice:secret", "production")).to.equal(undefined);
+    });
+
+    it("is fail-closed in an unrecognized environment (e.g. staging)", () => {
+      expect(resolveDevAuth("alice:secret", "staging")).to.equal(undefined);
+    });
+
+    it("returns undefined when no valid users are configured", () => {
+      expect(resolveDevAuth(",", "development")).to.equal(undefined);
     });
   });
 });

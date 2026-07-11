@@ -69,14 +69,30 @@ const isTest = process.env.NODE_ENV === "test";
 // Validate tenant config early
 const tenantConfig = validateTenantConfig();
 
-// Dev-only username/password login is hard-off in production. Warn if someone
-// leaves PERSONA_DEV_USERS set in a prod deploy so the ignored config is visible.
-if (isProduction && (process.env.PERSONA_DEV_USERS ?? "") !== "") {
+// Dev-only username/password login. resolveDevAuth is fail-closed: it only
+// returns users in a recognized development environment. A malformed value must
+// fail loudly and cleanly like every other config error, not throw an uncaught
+// exception at import time.
+let devAuth: ReturnType<typeof resolveDevAuth>;
+try {
+  devAuth = resolveDevAuth(process.env.PERSONA_DEV_USERS, process.env.NODE_ENV);
+} catch (error) {
+  console.error(
+    `ERROR: Invalid PERSONA_DEV_USERS: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+}
+// Surface the set-but-ignored case so a leftover PERSONA_DEV_USERS in a non-dev
+// deploy is visible rather than silently doing nothing.
+if (
+  devAuth === undefined &&
+  process.env.PERSONA_DEV_USERS !== undefined &&
+  process.env.PERSONA_DEV_USERS !== ""
+) {
   console.warn(
-    "PERSONA_DEV_USERS is set but ignored: username/password login is disabled in production",
+    "PERSONA_DEV_USERS is set but username/password login is disabled (only active in development with at least one user)",
   );
 }
-const devAuth = resolveDevAuth(process.env.PERSONA_DEV_USERS, isProduction);
 
 export const config = {
   // Environment
