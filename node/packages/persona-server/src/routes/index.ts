@@ -9,6 +9,12 @@ export {
   type GoogleOAuthRoutesConfig,
 } from "./oauth/index.js";
 
+// Dev username/password routes
+export {
+  createPasswordAuthRoutes,
+  type PasswordAuthRoutesConfig,
+} from "./password.js";
+
 // Token routes
 export { createTokenRoutes, type TokenRouteConfig } from "./token.js";
 

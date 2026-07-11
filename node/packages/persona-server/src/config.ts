@@ -1,5 +1,6 @@
 import { join } from "path";
 import { config as dotenvConfig } from "dotenv";
+import { resolveDevAuth } from "./utils/dev-users.js";
 
 dotenvConfig();
 
@@ -68,6 +69,15 @@ const isTest = process.env.NODE_ENV === "test";
 // Validate tenant config early
 const tenantConfig = validateTenantConfig();
 
+// Dev-only username/password login is hard-off in production. Warn if someone
+// leaves PERSONA_DEV_USERS set in a prod deploy so the ignored config is visible.
+if (isProduction && (process.env.PERSONA_DEV_USERS ?? "") !== "") {
+  console.warn(
+    "PERSONA_DEV_USERS is set but ignored: username/password login is disabled in production",
+  );
+}
+const devAuth = resolveDevAuth(process.env.PERSONA_DEV_USERS, isProduction);
+
 export const config = {
   // Environment
   isProduction,
@@ -119,6 +129,10 @@ export const config = {
           issuer: "https://accounts.google.com",
         }
       : undefined,
+
+  // Dev-only username/password login (undefined in production or when unset).
+  // Configured via PERSONA_DEV_USERS="alice:pw1,bob:pw2". See routes/password.ts.
+  devAuth,
 
   // CORS
   cors: {

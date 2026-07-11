@@ -17,8 +17,12 @@ import "./tests/repositories/session-repository.test.js";
 import "./tests/services/token-service.test.js";
 import "./tests/services/auth-service.test.js";
 
+// Utility tests
+import "./tests/utils/dev-users.test.js";
+
 // Route tests
 import "./tests/routes/tenant-middleware.test.js";
 import "./tests/routes/internal-api.test.js";
 import "./tests/routes/token-routes.test.js";
 import "./tests/routes/logout-routes.test.js";
+import "./tests/routes/password-routes.test.js";
