@@ -18,13 +18,13 @@ import {
 import { z } from "zod";
 import { createLogger } from "@agilehead/persona-logger";
 import type { AuthService } from "../services/auth-service.js";
-import { verifyDevUser, type DevUser } from "../utils/dev-users.js";
+import { verifyDevUser, type DevAuthConfig } from "../utils/dev-users.js";
 import { getTenantFromRequest } from "../middleware/tenant.js";
 
 const logger = createLogger("persona-auth-password");
 
 export type PasswordAuthRoutesConfig = {
-  users: DevUser[];
+  devAuth: DevAuthConfig;
   isProduction: boolean;
   cookieDomain?: string;
 };
@@ -74,7 +74,7 @@ export function createPasswordAuthRoutes(
 
       const { username, password } = parsed.data;
 
-      if (!verifyDevUser(config.users, username, password)) {
+      if (!verifyDevUser(config.devAuth, username, password)) {
         logger.warn("Dev login rejected", { tenantId, username });
         res.status(401).json({ error: "Invalid username or password" });
         return;

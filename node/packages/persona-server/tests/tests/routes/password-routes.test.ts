@@ -26,6 +26,7 @@ import { createTenantMiddleware } from "../../../src/middleware/tenant.js";
 import type { AuthService } from "../../../src/services/auth-service.js";
 import type { IIdentityRepository } from "../../../src/repositories/index.js";
 import type { TenantConfig } from "../../../src/config.js";
+import type { DevAuthConfig } from "../../../src/utils/dev-users.js";
 import { TEST_TENANTS, TEST_JWT_SECRET } from "@agilehead/persona-test-utils";
 
 const TEST_USERS = [
@@ -71,7 +72,12 @@ describe("Password Routes", () => {
     cleanupBetweenTests();
   });
 
-  function createTestApp(tenantConfig: TenantConfig) {
+  const DEFAULT_DEV_AUTH: DevAuthConfig = { users: TEST_USERS };
+
+  function createTestApp(
+    tenantConfig: TenantConfig,
+    devAuth: DevAuthConfig = DEFAULT_DEV_AUTH,
+  ) {
     const app = express();
     app.use(express.json());
     app.use(cookieParser());
@@ -79,7 +85,7 @@ describe("Password Routes", () => {
       "/auth",
       createTenantMiddleware(tenantConfig),
       createPasswordAuthRoutes(authService, {
-        users: TEST_USERS,
+        devAuth,
         isProduction: false,
         cookieDomain: undefined,
       }),
@@ -253,6 +259,141 @@ describe("Password Routes", () => {
       );
       expect(inApp1).to.not.equal(null);
       expect(inApp2).to.equal(null);
+    });
+  });
+
+  describe("Wildcard dev users", () => {
+    const WILDCARD_DEV_AUTH: DevAuthConfig = {
+      users: TEST_USERS,
+      wildcardPassword: "wild-secret",
+    };
+
+    it("signs in an arbitrary username with the wildcard password", async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const username = "ad-hoc-user@test.snapped";
+      const response = await request(app)
+        .post("/auth/login")
+        .send({ username, password: "wild-secret" });
+
+      expect(response.status).to.equal(200);
+      expect(response.body.accessToken).to.be.a("string");
+      expect(response.body.identity.id).to.be.a("string");
+
+      // The identity is really created (get-or-create), keyed by the username.
+      const identity = await identityRepo.findByProvider(
+        TEST_TENANTS.DEFAULT,
+        "password",
+        username,
+      );
+      expect(identity).to.not.equal(null);
+      expect(identity?.provider).to.equal("password");
+      expect(identity?.providerUserId).to.equal(username);
+    });
+
+    it("creates a distinct identity per arbitrary username", async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const first = await request(app)
+        .post("/auth/login")
+        .send({ username: "user-one@test.snapped", password: "wild-secret" });
+      const second = await request(app)
+        .post("/auth/login")
+        .send({ username: "user-two@test.snapped", password: "wild-secret" });
+
+      expect(first.status).to.equal(200);
+      expect(second.status).to.equal(200);
+      expect(second.body.identity.id).to.not.equal(first.body.identity.id);
+    });
+
+    it("is idempotent: the same arbitrary username reuses its identity", async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const first = await request(app)
+        .post("/auth/login")
+        .send({ username: "repeat@test.snapped", password: "wild-secret" });
+      const second = await request(app)
+        .post("/auth/login")
+        .send({ username: "repeat@test.snapped", password: "wild-secret" });
+
+      expect(first.status).to.equal(200);
+      expect(second.status).to.equal(200);
+      expect(second.body.identity.id).to.equal(first.body.identity.id);
+    });
+
+    it("rejects an arbitrary username with the wrong password", async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const response = await request(app)
+        .post("/auth/login")
+        .send({
+          username: "someone@test.snapped",
+          password: "not-the-wildcard",
+        });
+
+      expect(response.status).to.equal(401);
+    });
+
+    it('rejects the reserved "*" username even with the wildcard password', async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const response = await request(app)
+        .post("/auth/login")
+        .send({ username: "*", password: "wild-secret" });
+
+      expect(response.status).to.equal(401);
+    });
+
+    it("keeps explicit users authoritative over the wildcard", async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      // The explicit user authenticates with her own password.
+      const own = await request(app)
+        .post("/auth/login")
+        .send({ username: "alice", password: "alice-secret" });
+      expect(own.status).to.equal(200);
+
+      // ...but the wildcard password must NOT work for a listed username.
+      const viaWildcard = await request(app)
+        .post("/auth/login")
+        .send({ username: "alice", password: "wild-secret" });
+      expect(viaWildcard.status).to.equal(401);
+    });
+
+    it("signs in an arbitrary username per tenant and isolates identities", async () => {
+      const app = createTestApp(MULTI_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const username = "cross-tenant@test.snapped";
+      const response = await request(app)
+        .post(`/auth/login?tenant=${TEST_TENANTS.APP1}`)
+        .send({ username, password: "wild-secret" });
+
+      expect(response.status).to.equal(200);
+      expect(response.body.accessToken).to.be.a("string");
+
+      const inApp1 = await identityRepo.findByProvider(
+        TEST_TENANTS.APP1,
+        "password",
+        username,
+      );
+      const inApp2 = await identityRepo.findByProvider(
+        TEST_TENANTS.APP2,
+        "password",
+        username,
+      );
+      expect(inApp1).to.not.equal(null);
+      expect(inApp2).to.equal(null);
+    });
+
+    it("requires the tenant param for a wildcard login in multi-tenant mode", async () => {
+      const app = createTestApp(MULTI_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const response = await request(app)
+        .post("/auth/login")
+        .send({ username: "no-tenant@test.snapped", password: "wild-secret" });
+
+      expect(response.status).to.equal(400);
+      expect(response.body.error).to.equal("tenant parameter required");
     });
   });
 });
