@@ -34,6 +34,14 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
+// A dev/wildcard username that is itself an email address becomes the identity's
+// email, so signing in as "alice@example.com" yields that address rather than the
+// synthetic "<username>@password.local" fallback. Non-email usernames (e.g. a bare
+// "alice") keep the fallback.
+function emailFromUsername(username: string): string | undefined {
+  return /^[^@\s]+@[^@\s]+$/.test(username) ? username : undefined;
+}
+
 function getAuthCookieOptions(
   isProduction: boolean,
   domain?: string,
@@ -84,7 +92,12 @@ export function createPasswordAuthRoutes(
       const result = await authService.handleOAuthLogin(
         tenantId,
         "password",
-        { id: username, name: username, raw: {} },
+        {
+          id: username,
+          name: username,
+          email: emailFromUsername(username),
+          raw: {},
+        },
         req.ip,
         req.get("user-agent"),
       );
