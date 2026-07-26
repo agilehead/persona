@@ -359,5 +359,41 @@ describe("Password Routes", () => {
         .send({ username: "alice", password: "wild-secret" });
       expect(viaWildcard.status).to.equal(401);
     });
+
+    it("signs in an arbitrary username per tenant and isolates identities", async () => {
+      const app = createTestApp(MULTI_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const username = "cross-tenant@test.snapped";
+      const response = await request(app)
+        .post(`/auth/login?tenant=${TEST_TENANTS.APP1}`)
+        .send({ username, password: "wild-secret" });
+
+      expect(response.status).to.equal(200);
+      expect(response.body.accessToken).to.be.a("string");
+
+      const inApp1 = await identityRepo.findByProvider(
+        TEST_TENANTS.APP1,
+        "password",
+        username,
+      );
+      const inApp2 = await identityRepo.findByProvider(
+        TEST_TENANTS.APP2,
+        "password",
+        username,
+      );
+      expect(inApp1).to.not.equal(null);
+      expect(inApp2).to.equal(null);
+    });
+
+    it("requires the tenant param for a wildcard login in multi-tenant mode", async () => {
+      const app = createTestApp(MULTI_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const response = await request(app)
+        .post("/auth/login")
+        .send({ username: "no-tenant@test.snapped", password: "wild-secret" });
+
+      expect(response.status).to.equal(400);
+      expect(response.body.error).to.equal("tenant parameter required");
+    });
   });
 });
