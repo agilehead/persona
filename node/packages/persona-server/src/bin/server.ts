@@ -117,13 +117,17 @@ function startServer(): void {
     // regardless of LOG_LEVEL — this must never go unnoticed if it is ever on.
     if (config.devAuth !== undefined) {
       const passwordRoutes = createPasswordAuthRoutes(authService, {
-        users: config.devAuth.users,
+        devAuth: config.devAuth,
         isProduction: config.isProduction,
         cookieDomain: config.auth.cookieDomain,
       });
       app.use("/auth", tenantMiddleware, passwordRoutes);
+      const wildcardNote =
+        config.devAuth.wildcardPassword !== undefined
+          ? " + wildcard (any username)"
+          : "";
       console.warn(
-        `WARNING: dev username/password login is ENABLED (${String(config.devAuth.users.length)} user(s)). This must never be on in production.`,
+        `WARNING: dev username/password login is ENABLED (${String(config.devAuth.users.length)} user(s)${wildcardNote}). This must never be on in production.`,
       );
     }
 
