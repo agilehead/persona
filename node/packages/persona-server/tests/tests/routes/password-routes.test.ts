@@ -291,6 +291,19 @@ describe("Password Routes", () => {
       expect(identity?.providerUserId).to.equal(username);
     });
 
+    it("uses an email-shaped username as the identity email", async () => {
+      const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
+
+      const username = "real-email@example.com";
+      const response = await request(app)
+        .post("/auth/login")
+        .send({ username, password: "wild-secret" });
+
+      expect(response.status).to.equal(200);
+      // The identity carries the real email, not "<username>@password.local".
+      expect(response.body.identity.email).to.equal(username);
+    });
+
     it("creates a distinct identity per arbitrary username", async () => {
       const app = createTestApp(SINGLE_TENANT_CONFIG, WILDCARD_DEV_AUTH);
 
