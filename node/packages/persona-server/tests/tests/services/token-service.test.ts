@@ -276,6 +276,40 @@ describe("Token Service", () => {
     });
   });
 
+  describe("slideSession (rolling window)", () => {
+    it("pushes the session expiry forward by the full refresh lifetime", async () => {
+      const identity = await createTestIdentity();
+      const { session } = await tokenService.generateTokens(identity);
+
+      // Wind expiry back to nearly now, then slide.
+      const near = new Date(Date.now() + 1000);
+      await sessionRepo.extendExpiry(session.id, near);
+
+      const result = await tokenService.slideSession(session.id);
+      expect(result.success).to.be.true;
+
+      const after = await sessionRepo.findById(session.id);
+      expect(after).to.not.be.null;
+      // 7d config → expiry is now days out, well beyond the wound-back value.
+      expect(after!.expiresAt.getTime()).to.be.greaterThan(
+        near.getTime() + 60_000,
+      );
+    });
+
+    it("fails for an unknown session", async () => {
+      const result = await tokenService.slideSession("no-such-session");
+      expect(result.success).to.be.false;
+      if (!result.success) {
+        expect(result.error.code).to.equal("NOT_FOUND");
+      }
+    });
+
+    it("exposes the configured token lifetimes in seconds", () => {
+      expect(tokenService.accessTokenExpirySeconds).to.equal(900); // 15m
+      expect(tokenService.refreshTokenExpirySeconds).to.equal(604800); // 7d
+    });
+  });
+
   describe("revokeSession", () => {
     it("should revoke a session", async () => {
       const identity = await createTestIdentity();

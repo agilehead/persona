@@ -105,6 +105,7 @@ function startServer(): void {
         defaultRedirectUrl: config.server.publicUrl,
         isProduction: config.isProduction,
         cookieDomain: config.auth.cookieDomain,
+        refreshTokenExpiry: config.auth.refreshTokenExpiry,
       });
 
       // Apply tenant middleware to /auth/google (start flow) but NOT to /auth/google/callback
@@ -120,6 +121,7 @@ function startServer(): void {
         devAuth: config.devAuth,
         isProduction: config.isProduction,
         cookieDomain: config.auth.cookieDomain,
+        refreshTokenExpiry: config.auth.refreshTokenExpiry,
       });
       app.use("/auth", tenantMiddleware, passwordRoutes);
       const wildcardNote =
@@ -135,6 +137,7 @@ function startServer(): void {
     const tokenRoutes = createTokenRoutes(tokenService, identityRepo, {
       isProduction: config.isProduction,
       cookieDomain: config.auth.cookieDomain,
+      refreshTokenExpiry: config.auth.refreshTokenExpiry,
     });
     app.use("/token", tokenRoutes);
 

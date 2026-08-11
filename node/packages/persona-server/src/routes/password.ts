@@ -9,17 +9,13 @@
  * resolved by the tenant middleware, exactly like the Google flow.
  */
 
-import {
-  Router,
-  type Request,
-  type Response,
-  type CookieOptions,
-} from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { createLogger } from "@agilehead/persona-logger";
 import type { AuthService } from "../services/auth-service.js";
 import { verifyDevUser, type DevAuthConfig } from "../utils/dev-users.js";
 import { getTenantFromRequest } from "../middleware/tenant.js";
+import { authCookieOptions as buildAuthCookieOptions } from "./auth-cookie.js";
 
 const logger = createLogger("persona-auth-password");
 
@@ -27,6 +23,7 @@ export type PasswordAuthRoutesConfig = {
   devAuth: DevAuthConfig;
   isProduction: boolean;
   cookieDomain?: string;
+  refreshTokenExpiry: string;
 };
 
 const LoginSchema = z.object({
@@ -42,30 +39,14 @@ function emailFromUsername(username: string): string | undefined {
   return /^[^@\s]+@[^@\s]+$/.test(username) ? username : undefined;
 }
 
-function getAuthCookieOptions(
-  isProduction: boolean,
-  domain?: string,
-): CookieOptions {
-  const options: CookieOptions = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
-    path: "/",
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  };
-  if (domain !== undefined && domain !== "") {
-    options.domain = domain;
-  }
-  return options;
-}
-
 export function createPasswordAuthRoutes(
   authService: AuthService,
   config: PasswordAuthRoutesConfig,
 ): Router {
   const router = Router();
-  const authCookieOptions = getAuthCookieOptions(
+  const authCookieOptions = buildAuthCookieOptions(
     config.isProduction,
+    config.refreshTokenExpiry,
     config.cookieDomain,
   );
 

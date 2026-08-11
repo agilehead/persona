@@ -3,39 +3,19 @@
  * POST /token/refresh - Refresh access token
  */
 
-import {
-  Router,
-  type Request,
-  type Response,
-  type CookieOptions,
-} from "express";
+import { Router, type Request, type Response } from "express";
 import { createLogger } from "@agilehead/persona-logger";
 import type { TokenService } from "../services/token-service.js";
 import type { IIdentityRepository } from "../repositories/index.js";
+import { authCookieOptions as buildAuthCookieOptions } from "./auth-cookie.js";
 
 const logger = createLogger("persona-token");
 
 export type TokenRouteConfig = {
   isProduction: boolean;
   cookieDomain?: string;
+  refreshTokenExpiry: string;
 };
-
-function getAuthCookieOptions(
-  isProduction: boolean,
-  domain?: string,
-): CookieOptions {
-  const options: CookieOptions = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
-    path: "/",
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  };
-  if (domain !== undefined && domain !== "") {
-    options.domain = domain;
-  }
-  return options;
-}
 
 export function createTokenRoutes(
   tokenService: TokenService,
@@ -43,8 +23,9 @@ export function createTokenRoutes(
   config: TokenRouteConfig,
 ): Router {
   const router = Router();
-  const authCookieOptions = getAuthCookieOptions(
+  const authCookieOptions = buildAuthCookieOptions(
     config.isProduction,
+    config.refreshTokenExpiry,
     config.cookieDomain,
   );
 
@@ -87,18 +68,29 @@ export function createTokenRoutes(
         return;
       }
 
+      // Roll the window forward: an active session slides its expiry out by the
+      // full refresh lifetime, so continued use never lapses. Keep the same
+      // refresh token value; only its lifetime (server session + cookie) extends.
+      const slid = await tokenService.slideSession(session.id);
+      if (!slid.success) {
+        res.status(401).json({ error: slid.error.message });
+        return;
+      }
+
       // Generate new access token (keep same session/refresh token)
       const accessToken = tokenService.generateAccessToken(
         identity,
         session.id,
       );
 
-      // Update access token cookie
+      // Re-set BOTH cookies so the browser-side expiry slides forward too — the
+      // access token (new value) and the refresh token (same value, fresh maxAge).
       res.cookie("access_token", accessToken, authCookieOptions);
+      res.cookie("refresh_token", refreshToken, authCookieOptions);
 
       res.json({
         accessToken,
-        expiresIn: 900, // 15 minutes in seconds
+        expiresIn: tokenService.accessTokenExpirySeconds,
       });
     } catch (error) {
       logger.error("Token refresh error", { error });
