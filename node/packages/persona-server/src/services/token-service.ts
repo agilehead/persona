@@ -15,6 +15,7 @@ import type {
 import { success, failure, ErrorCode } from "../types.js";
 import type { ISessionRepository } from "../repositories/index.js";
 import { hashToken, generateRefreshToken } from "../utils/crypto.js";
+import { parseExpirySeconds } from "../utils/expiry.js";
 
 export type TokenServiceConfig = {
   jwtSecret: string;
@@ -53,6 +54,18 @@ export type TokenService = {
   validateRefreshToken(token: string): Promise<Result<Session>>;
 
   /**
+   * Slide a session's expiry forward by the full refresh-token lifetime — the
+   * rolling window. Called on every successful refresh so an active session
+   * never lapses; only genuine inactivity lets it expire.
+   */
+  slideSession(sessionId: string): Promise<Result<void>>;
+
+  /** The configured access-token lifetime, in seconds (for cookie/response TTLs). */
+  accessTokenExpirySeconds: number;
+  /** The configured refresh-token lifetime, in seconds (the rolling window). */
+  refreshTokenExpirySeconds: number;
+
+  /**
    * Revoke a session
    */
   revokeSession(sessionId: string): Promise<Result<void>>;
@@ -71,37 +84,17 @@ export type TokenService = {
   ): Promise<Result<number>>;
 };
 
-function parseExpiry(expiry: string): number {
-  const match = /^(\d+)([smhdw])$/.exec(expiry);
-  const numValue = match?.[1];
-  const unitValue = match?.[2];
-  if (numValue === undefined || unitValue === undefined) {
-    return 900; // Default 15 minutes
-  }
-  const value = parseInt(numValue, 10);
-  const unit = unitValue;
-  switch (unit) {
-    case "s":
-      return value;
-    case "m":
-      return value * 60;
-    case "h":
-      return value * 3600;
-    case "d":
-      return value * 86400;
-    case "w":
-      return value * 604800;
-    default:
-      return 900;
-  }
-}
-
 export function createTokenService(deps: TokenServiceDeps): TokenService {
   const { sessionRepo, config } = deps;
-  const accessTokenExpirySeconds = parseExpiry(config.accessTokenExpiry);
-  const refreshTokenExpirySeconds = parseExpiry(config.refreshTokenExpiry);
+  const accessTokenExpirySeconds = parseExpirySeconds(config.accessTokenExpiry);
+  const refreshTokenExpirySeconds = parseExpirySeconds(
+    config.refreshTokenExpiry,
+  );
 
   return {
+    accessTokenExpirySeconds,
+    refreshTokenExpirySeconds,
+
     async generateTokens(
       identity: Identity,
       ipAddress?: string,
@@ -202,6 +195,18 @@ export function createTokenService(deps: TokenServiceDeps): TokenService {
       }
 
       return success(session);
+    },
+
+    async slideSession(sessionId: string): Promise<Result<void>> {
+      const newExpiry = new Date(Date.now() + refreshTokenExpirySeconds * 1000);
+      const extended = await sessionRepo.extendExpiry(sessionId, newExpiry);
+      if (!extended) {
+        return failure({
+          code: ErrorCode.NOT_FOUND,
+          message: "Session not found",
+        });
+      }
+      return success(undefined);
     },
 
     async revokeSession(sessionId: string): Promise<Result<void>> {

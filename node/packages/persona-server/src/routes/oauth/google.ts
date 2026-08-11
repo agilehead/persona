@@ -26,6 +26,7 @@ import {
 } from "../../services/oauth/google.js";
 import { generateOAuthState, generateNonce } from "../../utils/crypto.js";
 import { getTenantFromRequest } from "../../middleware/tenant.js";
+import { authCookieOptions as buildAuthCookieOptions } from "../auth-cookie.js";
 
 const logger = createLogger("persona-oauth-google");
 
@@ -35,6 +36,7 @@ export type GoogleOAuthRoutesConfig = {
   defaultRedirectUrl: string;
   isProduction: boolean;
   cookieDomain?: string;
+  refreshTokenExpiry: string;
 };
 
 // Cookie options for OAuth state
@@ -56,23 +58,6 @@ function getStateCookieOptions(
 }
 
 // Cookie options for auth tokens
-function getAuthCookieOptions(
-  isProduction: boolean,
-  domain?: string,
-): CookieOptions {
-  const options: CookieOptions = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
-    path: "/",
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  };
-  if (domain !== undefined && domain !== "") {
-    options.domain = domain;
-  }
-  return options;
-}
-
 export function createGoogleOAuthRoutes(
   authService: AuthService,
   _tokenService: TokenService,
@@ -83,8 +68,9 @@ export function createGoogleOAuthRoutes(
     config.isProduction,
     config.cookieDomain,
   );
-  const authCookieOptions = getAuthCookieOptions(
+  const authCookieOptions = buildAuthCookieOptions(
     config.isProduction,
+    config.refreshTokenExpiry,
     config.cookieDomain,
   );
 

@@ -21,6 +21,7 @@ export type ISessionRepository = {
   findByTokenHash(tokenHash: string): Promise<Session | null>;
   findByIdentityId(identityId: string): Promise<Session[]>;
   revoke(id: string): Promise<boolean>;
+  extendExpiry(id: string, expiresAt: Date): Promise<boolean>;
   revokeAllByIdentityId(identityId: string): Promise<number>;
   revokeAllByUserId(tenantId: string, userId: string): Promise<number>;
   deleteExpired(): Promise<number>;

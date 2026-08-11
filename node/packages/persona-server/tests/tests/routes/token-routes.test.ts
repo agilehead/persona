@@ -67,6 +67,7 @@ describe("Token Routes", () => {
       createTokenRoutes(tokenService, identityRepo, {
         isProduction: false,
         cookieDomain: undefined,
+        refreshTokenExpiry: "7d",
       }),
     );
     return app;
@@ -153,6 +154,73 @@ describe("Token Routes", () => {
         c.startsWith("access_token="),
       );
       expect(accessTokenCookie).to.exist;
+    });
+
+    it("re-sets the refresh_token cookie (rolling window) with a long maxAge", async () => {
+      const app = createTestApp();
+      const loginResult = await authService.handleOAuthLogin(
+        TEST_TENANTS.DEFAULT,
+        "google",
+        {
+          id: `google-roll-${generateId(8)}`,
+          email: `roll-${generateId(8)}@example.com`,
+        },
+      );
+      expect(loginResult.success).to.be.true;
+      if (!loginResult.success) return;
+      const { refreshToken } = loginResult.data.tokens;
+
+      const response = await request(app)
+        .post("/token/refresh")
+        .set("Cookie", `refresh_token=${refreshToken}`);
+
+      expect(response.status).to.equal(200);
+      const cookies = response.headers["set-cookie"] as string[] | undefined;
+      const refreshCookie = cookies?.find((c: string) =>
+        c.startsWith("refresh_token="),
+      );
+      // The refresh cookie is re-set on every refresh so its browser-side expiry
+      // slides forward — and its maxAge reflects the 7d refresh lifetime, not the
+      // old hard-coded 30d (7 days = 604800 seconds).
+      expect(refreshCookie, "refresh_token re-set on refresh").to.exist;
+      expect(refreshCookie).to.match(/Max-Age=604800/i);
+    });
+
+    it("slides the session's expiry forward on refresh", async () => {
+      const app = createTestApp();
+      const db = getTestDb().db;
+      const sessionRepo = createSessionRepository(db);
+      const loginResult = await authService.handleOAuthLogin(
+        TEST_TENANTS.DEFAULT,
+        "google",
+        {
+          id: `google-slide-${generateId(8)}`,
+          email: `slide-${generateId(8)}@example.com`,
+        },
+      );
+      expect(loginResult.success).to.be.true;
+      if (!loginResult.success) return;
+      const { refreshToken } = loginResult.data.tokens;
+      const sessions = await sessionRepo.findByIdentityId(
+        loginResult.data.identity.id,
+      );
+      const sessionId = sessions[0]!.id;
+
+      // Wind the session's expiry back so we can see the refresh push it forward.
+      const before = new Date(Date.now() + 1000);
+      await sessionRepo.extendExpiry(sessionId, before);
+
+      const response = await request(app)
+        .post("/token/refresh")
+        .set("Cookie", `refresh_token=${refreshToken}`);
+      expect(response.status).to.equal(200);
+
+      const after = await sessionRepo.findById(sessionId);
+      expect(after).to.not.be.null;
+      // Now ~7 days out, well past where we set it.
+      expect(after!.expiresAt.getTime()).to.be.greaterThan(
+        before.getTime() + 60_000,
+      );
     });
 
     it("should return 401 for missing refresh token", async () => {

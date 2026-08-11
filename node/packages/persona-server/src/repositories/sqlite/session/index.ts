@@ -9,6 +9,7 @@ import { findById } from "./find-by-id.js";
 import { findByTokenHash } from "./find-by-token-hash.js";
 import { findByIdentityId } from "./find-by-identity-id.js";
 import { revoke } from "./revoke.js";
+import { extendExpiry } from "./extend-expiry.js";
 import { revokeAllByIdentityId } from "./revoke-all-by-identity-id.js";
 import { revokeAllByUserId } from "./revoke-all-by-user-id.js";
 import { deleteExpired } from "./delete-expired.js";
@@ -24,6 +25,8 @@ export function createSessionRepository(
     findByIdentityId: (identityId) =>
       Promise.resolve(findByIdentityId(db, identityId)),
     revoke: (id) => Promise.resolve(revoke(db, id)),
+    extendExpiry: (id, expiresAt) =>
+      Promise.resolve(extendExpiry(db, id, expiresAt)),
     revokeAllByIdentityId: (identityId) =>
       Promise.resolve(revokeAllByIdentityId(db, identityId)),
     revokeAllByUserId: (tenantId, userId) =>
