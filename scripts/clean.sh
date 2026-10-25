@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 echo "=== Cleaning Persona ==="
 
 # remove dist folders in every workspace that has any
-for pkg in node/packages/*; do
+for pkg in services/persona/node/packages/* services/persona/node/apps/*; do
   [[ -d "$pkg" ]] || continue
   if [[ -d "$pkg/dist" ]]; then
     echo "Cleaning $pkg/dist…"
@@ -25,7 +25,7 @@ if [[ -d "node_modules" ]]; then
 fi
 
 # remove node_modules from all packages
-for pkg in node/packages/*; do
+for pkg in services/persona/node/packages/* services/persona/node/apps/*; do
   [[ -d "$pkg" ]] || continue
   if [[ -d "$pkg/node_modules" ]]; then
     echo "Cleaning $pkg/node_modules…"

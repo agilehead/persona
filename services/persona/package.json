@@ -1,0 +1,10 @@
+{
+  "name": "persona-product",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build --prefix ../..",
+    "lint": "npm run lint --prefix ../..",
+    "test": "npm test --prefix ../.."
+  }
+}

@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/persona/">
+    <Project Path="services/persona/csharp/apps/Persona.Server/Persona.Server.csproj" />
+    <Project Path="services/persona/csharp/packages/Persona.AdapterAuth/Persona.AdapterAuth.csproj" />
+    <Project Path="services/persona/csharp/packages/Persona.AdapterHttp/Persona.AdapterHttp.csproj" />
+    <Project Path="services/persona/csharp/packages/Persona.AdapterRuntime/Persona.AdapterRuntime.csproj" />
+    <Project Path="services/persona/csharp/packages/Persona.AdapterSqlite/Persona.AdapterSqlite.csproj" />
+    <Project Path="services/persona/csharp/packages/Persona.Contracts/Persona.Contracts.csproj" />
+    <Project Path="services/persona/csharp/packages/Persona.Domain/Persona.Domain.csproj" />
+    <Project Path="services/persona/csharp/packages/Persona.Kernel/Persona.Kernel.csproj" />
+  </Folder>
+  <Folder Name="/build/">
+    <Project Path="services/persona/csharp/build/Persona.EfCompiler/Persona.EfCompiler.csproj" />
+    <Project Path="services/persona/csharp/build/Persona.EfHost/Persona.EfHost.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="services/persona/csharp/tests/Persona.ContractProbe/Persona.ContractProbe.csproj" />
+  </Folder>
+</Solution>

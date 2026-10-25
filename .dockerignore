@@ -37,11 +37,17 @@ docs/
 tsconfig*.json
 !tsconfig.base.json
 
-# Test files
-**/*.test.ts
-**/*.spec.ts
-**/tests/
-
 # Logs
 *.log
 logs/
+
+# Native build output is rebuilt in the SDK stage
+services/persona/csharp/**/bin/
+services/persona/csharp/**/obj/
+artifacts/
+
+# Private environment and verification data at every service depth
+**/.env
+**/.env.*
+**/.analysis
+**/.tests

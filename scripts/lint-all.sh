@@ -19,6 +19,7 @@ PACKAGES=(
   "persona-db"
   "persona-test-utils"
   "persona-server"
+  "persona-client"
 )
 
 # Determine if --fix flag is passed
@@ -29,7 +30,8 @@ fi
 
 # Loop through each package and run lint
 for pkg_name in "${PACKAGES[@]}"; do
-  pkg="node/packages/$pkg_name"
+  pkg="services/persona/node/packages/$pkg_name"
+  if [[ "$pkg_name" == "persona-server" ]]; then pkg="services/persona/node/apps/server"; fi
   if [[ ! -d "$pkg" ]]; then
     echo "Package $pkg not found, skipping."
     continue

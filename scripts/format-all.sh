@@ -9,20 +9,13 @@ cd "$(dirname "$0")/.."
 
 echo "=== Formatting Persona ==="
 
-# Build list of files to format
-FILES_TO_FORMAT=(
-  "node/packages/*/src/**/*.ts"
-  "*.json"
-  "node/packages/*/*.json"
-  "database/**/*.js"
-)
-
-# Only add test patterns if tests directory exists (not in Docker builds)
-if compgen -G "node/packages/*/tests/**/*.ts" > /dev/null 2>&1; then
-  FILES_TO_FORMAT+=("node/packages/*/tests/**/*.ts")
-fi
-
-# Run prettier on all relevant files
-npx prettier --write "${FILES_TO_FORMAT[@]}" --ignore-unknown
+# Source and tests follow the product's implementation owner.
+./node_modules/.bin/prettier --write --ignore-unknown --no-error-on-unmatched-pattern \
+  "*.json" "scripts/*.mjs" \
+  "services/persona/node/{apps,packages}/*/src/**/*.ts" \
+  "services/persona/node/{apps,packages}/*/package.json" \
+  "services/persona/node/packages/*/tests/**/*.ts" \
+  "services/persona/node/tests/**/*.ts" \
+  "services/persona/**/*.mjs"
 
 echo "=== Formatting completed ==="

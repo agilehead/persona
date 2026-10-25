@@ -44,5 +44,10 @@ src/generated/
 .todos/
 .analysis/
 
-# Docker devenv data
-devenv/data/
+# Docker services/persona/docker/development data
+services/persona/docker/development/data/
+
+# .NET and native build outputs
+/services/persona/csharp/**/bin/
+/services/persona/csharp/**/obj/
+artifacts/
