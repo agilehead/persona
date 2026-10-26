@@ -29,7 +29,8 @@ fi
 
 # Loop through every package in order
 for pkg_name in "${PACKAGES[@]}"; do
-  pkg="node/packages/$pkg_name"
+  pkg="services/persona/node/packages/$pkg_name"
+  if [[ "$pkg_name" == "persona-server" ]]; then pkg="services/persona/node/apps/server"; fi
   if [[ ! -d "$pkg" ]]; then
     echo "Package $pkg not found, skipping."
     continue

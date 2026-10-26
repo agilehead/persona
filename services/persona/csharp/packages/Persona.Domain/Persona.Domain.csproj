@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Persona.Kernel/Persona.Kernel.csproj" />
+  </ItemGroup>
+</Project>

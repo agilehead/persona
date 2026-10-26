@@ -143,9 +143,13 @@ export default typescript.config(
   // Ignores
   {
     ignores: [
+      "**/.analysis/**",
       "node_modules/**",
       "**/node_modules/**",
       "**/dist/**",
+      "services/persona/csharp/**/bin/**",
+      "services/persona/csharp/**/obj/**",
+      "artifacts/**",
       "**/generated/**",
       "scripts/**",
     ],

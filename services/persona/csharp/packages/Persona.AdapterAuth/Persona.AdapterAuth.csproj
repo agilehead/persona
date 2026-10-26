@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Persona.Domain/Persona.Domain.csproj" />
+    <ProjectReference Include="../Persona.Contracts/Persona.Contracts.csproj" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" />
+  </ItemGroup>
+</Project>

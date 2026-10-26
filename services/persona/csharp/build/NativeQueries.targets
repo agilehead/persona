@@ -1,0 +1,55 @@
+<Project>
+  <PropertyGroup>
+    <EFScaffoldModelStage>publish</EFScaffoldModelStage>
+    <EFPrecompileQueriesStage>publish</EFPrecompileQueriesStage>
+    <PersonaEfHostOutput>$(MSBuildThisFileDirectory)Persona.EfHost/bin/$(MSBuildProjectName)/$(Configuration)/net11.0/</PersonaEfHostOutput>
+    <EFStartupAssembly>$(PersonaEfHostOutput)Persona.EfHost.exe</EFStartupAssembly>
+  </PropertyGroup>
+  <Target Name="PersonaPrepareEfHost" Condition="'$(_EFGenerationStage)'=='$(EFScaffoldModelStage)' Or '$(_EFGenerationStage)'=='$(EFPrecompileQueriesStage)'">
+    <Error Condition="'$(DOTNET_HOST_PATH)'==''" Text="EF native query compilation requires the selected dotnet SDK host." />
+    <PropertyGroup>
+      <_PersonaEfBuildArguments>--disable-build-servers --configuration &quot;$(Configuration)&quot; --framework &quot;$(TargetFramework)&quot; -p:Platform=&quot;$(Platform)&quot; -p:RuntimeIdentifier= -p:SelfContained=false -p:PublishAot=false -p:UseSharedCompilation=false -p:_EFGenerationStage=&quot;$(_EFGenerationStage)&quot;</_PersonaEfBuildArguments>
+    </PropertyGroup>
+    <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; build &quot;$(MSBuildThisFileDirectory)Persona.EfCompiler/Persona.EfCompiler.csproj&quot; $(_PersonaEfBuildArguments)" />
+    <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; build &quot;$(MSBuildThisFileDirectory)Persona.EfHost/Persona.EfHost.csproj&quot; $(_PersonaEfBuildArguments) -p:PersonaEfTargetName=&quot;$(MSBuildProjectName)&quot; -p:PersonaEfTargetProject=&quot;$(MSBuildProjectFullPath)&quot; -p:RestoreRecursive=false -p:BuildProjectReferences=false" />
+  </Target>
+  <Target Name="OptimizeDbContext" DependsOnTargets="ResolvePackageAssets;PersonaPrepareEfHost">
+    <PropertyGroup>
+      <EFRootNamespace Condition="'$(EFRootNamespace)'==''">$(RootNamespace)</EFRootNamespace>
+      <EFRootNamespace Condition="'$(EFRootNamespace)'==''">$(AssemblyName)</EFRootNamespace>
+      <EFTargetNamespace Condition="'$(EFTargetNamespace)'==''">$(EFRootNamespace)</EFTargetNamespace>
+      <EFOutputDir Condition="'$(EFOutputDir)'==''">$(_FullIntermediateOutputPath)</EFOutputDir>
+      <_EFNoScaffold>true</_EFNoScaffold>
+      <_EFNoScaffold Condition="'$(_EFGenerationStage)'=='$(EFScaffoldModelStage)'">false</_EFNoScaffold>
+      <_EFPrecompileQueries>false</_EFPrecompileQueries>
+      <_EFPrecompileQueries Condition="'$(_EFGenerationStage)'=='$(EFPrecompileQueriesStage)'">true</_EFPrecompileQueries>
+      <EFNullable Condition="'$(Nullable)'=='enable' Or '$(Nullable)'=='annotations'">true</EFNullable>
+      <EFNullable Condition="'$(EFNullable)'==''">false</EFNullable>
+    </PropertyGroup>
+    <OptimizeDbContext Assembly="$(_AssemblyFullName)"
+                       StartupAssembly="$(EFStartupAssembly)"
+                       ProjectAssetsFile="$(ProjectAssetsFile)"
+                       DesignAssembly="$(PersonaEfHostOutput)Microsoft.EntityFrameworkCore.Design.dll"
+                       RuntimeFrameworkVersion="$(RuntimeFrameworkVersion)"
+                       TargetFrameworkMoniker="$(TargetFrameworkMoniker)"
+                       DbContextType="$(DbContextType)"
+                       RootNamespace="$(EFRootNamespace)"
+                       TargetNamespace="$(EFTargetNamespace)"
+                       Language="$(Language)"
+                       Nullable="$(EFNullable)"
+                       RuntimeCopyLocalItems="@(RuntimeCopyLocalItems)"
+                       OutputDir="$(EFOutputDir)"
+                       Project="$(MSBuildProjectFullPath)"
+                       ProjectDir="$(MSBuildProjectDirectory)"
+                       NoScaffold="$(_EFNoScaffold)"
+                       PrecompileQueries="$(_EFPrecompileQueries)"
+                       EnvironmentVariables="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework);RuntimeIdentifier=;SelfContained=false;PublishAot=false"
+                       Condition="'$(_EFNoScaffold)'=='false' Or '$(_EFPrecompileQueries)'=='true'">
+      <Output TaskParameter="GeneratedFiles" PropertyName="_EFGeneratedFiles" />
+    </OptimizeDbContext>
+    <Delete Files="$(EFGeneratedSourcesBuildFile)" Condition="'$(_EFGenerationStage)'=='build'" />
+    <Delete Files="$(EFGeneratedSourcesPublishFile)" Condition="'$(_EFGenerationStage)'=='publish'" />
+    <WriteLinesToFile File="$(EFGeneratedSourcesBuildFile)" Lines="$(_EFGeneratedFiles)" Condition="'$(_EFGenerationStage)'=='build'" />
+    <WriteLinesToFile File="$(EFGeneratedSourcesPublishFile)" Lines="$(_EFGeneratedFiles)" Condition="'$(_EFGenerationStage)'=='publish'" />
+  </Target>
+</Project>

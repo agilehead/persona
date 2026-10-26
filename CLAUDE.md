@@ -8,6 +8,44 @@
 
 This file provides guidance to Claude Code when working with the Persona OAuth authentication service.
 
+## Service-owned layout
+
+The repository follows Ctlflow's product ownership model. The repository root owns workspace configuration, build orchestration and documentation. Product source, database assets, operations and acceptance tests belong to `services/persona/`. The existing Node implementation retains its behavior and package contracts; it is explicitly selected for comparison and is never a C# fallback.
+
+```text
+services/persona/
+  package.json
+  node/
+    apps/                     Existing Node application composition roots
+    packages/                 Existing Node libraries and client SDKs
+    tests/                    Node service tests and support
+    Dockerfile
+  csharp/
+    apps/                     Thin native/managed application roots
+    packages/                 Kernel, domain, contracts and adapters
+    tests/                    C# probes and regression assertions
+    build/                    Build-only EF compiler and design-time host
+    scripts/                  C# generation/publication tools
+    Dockerfile
+  database/persona/sqlite/   Existing Knex migrations and seed assets
+  knexfile.persona.mjs
+  docker/                     Development and production configuration
+  scripts/                    Shared product generators, operations and acceptance
+  tests/contracts/            One cross-runtime assertion bank
+```
+
+Only implemented capabilities receive directories. Public package names, wire contracts, migration filenames/history, stored bytes and media paths remain unchanged. No production data is moved or reset by the source reorganization.
+
+`npm run verify:structure` checks workspace ownership, required service roots, solution project paths and the absence of the superseded repository-wide source pools. The build runs this check. Product-specific commands are under `services/persona/scripts/`; root npm commands remain the workspace entry points. Knex alone owns schema changes; moving its source does not run migrations.
+
+## Canonical server architecture
+
+The application server is C# / NativeAOT under `services/persona/csharp/`, with the same apps/packages/build/scripts/tests structure and pinned build infrastructure as Snapped. Read `README.md` and `services/persona/csharp/README.md` for current commands and architecture. The Node server is retained for explicit comparison, not as a runtime fallback. The TypeScript client SDK and Knex migrations remain Node-owned.
+
+C# uses functional static modules, immutable domain records, function-delegate persistence ports, `Result<T>`, cancellation and `IUnitOfWork.Run`. Classes are used where EF, ASP.NET, GraphQL or provider frameworks require them. Database queries use EF LINQ in C# and Tinqer in Node; handwritten runtime SQL is forbidden. Generated EF rows are separate from domain records. Existing database schema and representations are preserved; identity IDs are base62 strings, not UUIDs.
+
+Required verification: `npm run build`, `npm run lint`, `npm run build:native`, `npm test`, then `npm run test:integration`. Execute real NativeAOT binaries and both Docker variants; successful managed tests alone are insufficient. Never run broad process killers for acceptance. Keep private `.analysis/` notes ignored and preserve production data. Do not publish, deploy or push without the applicable user authorization.
+
 ## Critical Guidelines
 
 ### NEVER ACT WITHOUT EXPLICIT USER APPROVAL
@@ -72,7 +110,7 @@ Persona is a standalone multi-tenant OAuth authentication service. It handles us
 
 - **Multi-tenancy**: Single mode (one tenant) or multi mode (many tenants)
 - **OAuth Providers**: Google (expandable to other providers)
-- **JWT Tokens**: Access tokens with refresh token rotation
+- **JWT Tokens**: Access tokens with sliding refresh sessions
 - **Internal API**: Service-to-service identity linking and role management
 - **Session Management**: Secure session handling with revocation
 
@@ -87,7 +125,7 @@ Persona is a standalone multi-tenant OAuth authentication service. It handles us
 
 **Code Principles:**
 
-- **NO CLASSES** - Use functional style with strict types
+- **FUNCTIONAL MODULES** - Use strict types; C# framework-bound classes are permitted as described above
 - **NO DYNAMIC IMPORTS** - Always use static imports
 - **PREFER FUNCTIONS** - Export functions from modules
 - **USE RESULT TYPES** - For error handling
@@ -152,11 +190,11 @@ When you encounter linting, type, or test errors, the solution is ALWAYS to fix 
 ### Database Conventions
 
 - **SQLite** for development/initial deployment (via Tinqer)
-- **All SQL via Tinqer** - Never write raw SQL
+- **Persistence** - EF LINQ in C#; Tinqer in Node; never write runtime SQL
 - **Repository Pattern** - Interfaces with SQLite implementation
 - **Singular table names**: lowercase (e.g., `identity`, `session`)
 - **Column names**: snake_case for all columns
-- **UUIDs** for primary keys
+- **Primary keys** preserve the existing stored identifier formats
 - **Hard deletes** with audit logging
 - **MIGRATION POLICY**: Use migration system for all schema changes
 
@@ -180,7 +218,7 @@ When you encounter linting, type, or test errors, the solution is ALWAYS to fix 
 ./scripts/clean.sh
 
 # Start server
-./scripts/start.sh
+./services/persona/scripts/start.sh
 
 # Lint entire project
 ./scripts/lint-all.sh           # Run ESLint on all packages
@@ -190,7 +228,7 @@ When you encounter linting, type, or test errors, the solution is ALWAYS to fix 
 ./scripts/format-all.sh
 
 # Docker commands
-./scripts/docker-build.sh       # Build Docker image
+./services/persona/scripts/docker-build.sh       # Build Docker image
 ```
 
 ### Database Commands
@@ -247,7 +285,7 @@ After pushing a feature branch, provide this URL to the user so they can create 
 
 ```
 persona/
-├── node/                    # Monorepo packages
+├── services/persona/node/                    # Monorepo packages
 │   └── packages/
 │       ├── persona-server/  # Express API server
 │       ├── persona-db/      # Database layer

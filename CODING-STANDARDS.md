@@ -2,11 +2,17 @@
 
 This document outlines the coding standards and patterns used throughout the Persona OAuth service codebase. All contributors must follow these guidelines to maintain consistency and quality.
 
+## C# backend
+
+The canonical server uses the Snapped architecture under `services/persona/csharp/`. Use feature-based functional modules, immutable domain records, function-delegate stores, `Result<T>` for expected failures, cancellation tokens and `IUnitOfWork.Run`. Separate domain records from generated EF persistence rows. EF, ASP.NET and provider framework types may use classes; stateless business services remain static modules. C# queries use EF LINQ, compiled for NativeAOT. No handwritten application SQL or reflection-based JSON serialization is permitted. Contracts own source-generated serializers. HTTP and GraphQL ownership follows the package boundaries described in the C# README.
+
+The TypeScript rules below apply to the retained Node implementation and SDK. Knex remains the schema owner. Verify identical HTTP/storage behavior for Node, managed and actual native binaries, then Node, managed and NativeAOT Docker variants. Keep all application warnings as errors and upstream native warnings visible.
+
 ## Core Principles
 
 ### 1. Functional Programming First
 
-**NO CLASSES** - Use functions and modules exclusively.
+**TypeScript: NO CLASSES** - Use functions and modules exclusively.
 
 ```typescript
 // Good - Pure function with explicit dependencies
@@ -76,7 +82,7 @@ export async function findIdentity(db: Database, identityId: string): Promise<Id
 
 ### 3. Database Patterns with Tinqer
 
-#### All SQL MUST use Tinqer
+#### Node SQL MUST use Tinqer
 
 **CRITICAL**: Never write raw SQL. Always use Tinqer for type-safe queries.
 
