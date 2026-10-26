@@ -58,3 +58,13 @@ systemd-run --user --scope --quiet --expand-environment=no \
 ```
 
 The shared HTTP contracts cover normal and malformed inputs, tenant/security boundaries, wire and storage representations, and complete service operations. The C# probe verifies signed Google responses, claim rejection, PKCE, signing-key rotation and refresh/session behavior. All fixtures live under ignored `.tests/`; schema snapshots prove runtime operations leave Knex ownership intact. Docker acceptance uses the actual `services/persona/docker/development/docker-compose.yml` with test-owned names and data. Production deployment requires separate authorization and backup verification.
+
+## Registry release
+
+`services/persona/scripts/docker-build.sh` defaults to NativeAOT and builds both
+the application and its separate Knex migration image. After verification,
+`services/persona/scripts/docker-push.sh` publishes both images to GHCR under
+the selected tag and the current commit tag. It requires an existing registry
+login and checks that both local images exist before publishing either. Snapped
+must refresh both images before its production rollout. Publishing does not
+restart services or modify databases.

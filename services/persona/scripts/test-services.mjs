@@ -35,7 +35,12 @@ async function freePort() {
   await new Promise((resolve) => socket.close(resolve));
   return port;
 }
-await run([process.execPath, "--test", "services/persona/tests/contracts/migration-paths.test.mjs"]);
+await run([
+  process.execPath,
+  "--test",
+  "services/persona/tests/contracts/migration-paths.test.mjs",
+  "services/persona/tests/contracts/image-publication.test.mjs",
+]);
 await run(["npm", "run", "test", "--workspace", "@agilehead/persona-client"]);
 let total = 0;
 for (const target of targets) {
