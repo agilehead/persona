@@ -9,6 +9,17 @@ namespace Persona.AdapterHttp;
 
 public static class Http
 {
+    public static bool SessionOriginAllowed(HttpContext context, Settings settings)
+    {
+        var origin = context.Request.Headers.Origin;
+        // CORS alone only controls reading the response. Check before parsing or
+        // mutating sessions, including simple form requests and opaque origins.
+        if (origin.Count > 0)
+            return origin.Count == 1 && settings.CorsOrigins.Contains(origin[0], StringComparer.Ordinal);
+        // Cookie clients must identify an allowed browser origin. Non-browser
+        // clients can supply a token in the body without ambient cookies.
+        return context.Request.Cookies.Count == 0 && !context.Request.Headers.ContainsKey("Sec-Fetch-Site");
+    }
     public static Task Json(HttpContext context, JsonObject value, int status = 200)
     {
         context.Response.StatusCode = status;

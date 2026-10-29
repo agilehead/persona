@@ -29,6 +29,14 @@ The executable delegates startup to the HTTP host. Domain feature modules own im
 
 ## Storage
 
+Session mutations (`POST /auth/login`, `/token/refresh`, `/logout`) validate
+Origin before reading the body or changing cookies/sessions. An Origin must
+exactly match `PERSONA_CORS_ORIGINS`; opaque, multiple and unlisted origins are
+rejected. Cookie requests also require that allowed Origin. Non-browser clients
+can send refresh tokens in a JSON body without cookies or browser fetch metadata.
+Credentialed CORS alone is not this mutation defense. OAuth GET callbacks retain
+their separate state/PKCE validation; trusted internal calls use Bearer auth.
+
 Knex in `services/persona/database/persona/sqlite/migrations/` remains the sole schema owner. Startup requires an existing absolute database path, enables WAL through the SQLite provider, and opens read/write connections with foreign keys and a busy timeout. It never creates tables, migrates, resets or seeds the schema. Runtime persistence uses EF LINQ and precompiled native queries; application code contains no handwritten SQL command text.
 
 `npm run generate:model` creates a disposable Knex database, checks the database `DatabaseSchema` contract against every table, column, nullability and key, and generates persistence rows and the EF mapping under `AdapterSqlite/generated/`. `npm run build` runs that generator with `--check`; drift fails the build. These generated files are source artifacts. The design-time EF compiled model and interceptors are rebuildable `obj/` output and are not tracked.

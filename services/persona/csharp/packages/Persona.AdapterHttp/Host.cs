@@ -37,6 +37,13 @@ public static class Host
         if (devAuth is not null) Console.Error.WriteLine("WARNING: development username/password login is ENABLED; production environments disable it");
         app.Use(async (context, next) =>
         {
+            var path = context.Request.Path.Value?.TrimEnd('/') ?? "";
+            if (HttpMethods.IsPost(context.Request.Method) &&
+                (path.Equals("/logout", StringComparison.OrdinalIgnoreCase)
+                || path.Equals("/token/refresh", StringComparison.OrdinalIgnoreCase)
+                || path.Equals("/auth/login", StringComparison.OrdinalIgnoreCase))
+                && !Http.SessionOriginAllowed(context, settings))
+            { await Http.Error(context, 403, "Browser origin is not allowed"); return; }
             if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } feature) feature.MaxRequestBodySize = 1024 * 1024;
             try { await Http.Body(context); await next(context); }
             catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
