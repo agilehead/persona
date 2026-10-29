@@ -12,10 +12,10 @@ echo "=== Formatting Persona ==="
 # Source and tests follow the product's implementation owner.
 ./node_modules/.bin/prettier --write --ignore-unknown --no-error-on-unmatched-pattern \
   "*.json" "scripts/*.mjs" \
-  "services/persona/node/{apps,packages}/*/src/**/*.ts" \
-  "services/persona/node/{apps,packages}/*/package.json" \
+  "services/persona/node/packages/*/src/**/*.ts" \
+  "services/persona/node/packages/*/package.json" \
   "services/persona/node/packages/*/tests/**/*.ts" \
-  "services/persona/node/tests/**/*.ts" \
+  "services/persona/database/**/*.ts" \
   "services/persona/**/*.mjs"
 
 echo "=== Formatting completed ==="

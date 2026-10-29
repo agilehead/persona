@@ -14,16 +14,9 @@ export const csharpProjects = ["Server", "ContractProbe"].map(
 );
 
 export function command(target, app = "Server") {
-  if (target === "node") {
-    assert.equal(app, "Server");
-    return [
-      process.execPath,
-      `services/${product}/node/apps/server/dist/bin/server.js`,
-    ];
-  }
   assert(
     ["csharp", "nativeaot"].includes(target),
-    "Choose node, csharp or nativeaot",
+    "Choose csharp or nativeaot",
   );
   if (target === "csharp")
     return [

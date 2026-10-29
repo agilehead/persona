@@ -16,9 +16,7 @@ echo "=== Linting Persona ==="
 # Define the package order
 PACKAGES=(
   "persona-logger"
-  "persona-db"
   "persona-test-utils"
-  "persona-server"
   "persona-client"
 )
 
@@ -31,7 +29,6 @@ fi
 # Loop through each package and run lint
 for pkg_name in "${PACKAGES[@]}"; do
   pkg="services/persona/node/packages/$pkg_name"
-  if [[ "$pkg_name" == "persona-server" ]]; then pkg="services/persona/node/apps/server"; fi
   if [[ ! -d "$pkg" ]]; then
     echo "Package $pkg not found, skipping."
     continue

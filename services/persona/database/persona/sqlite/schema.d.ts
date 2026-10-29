@@ -1,5 +1,4 @@
-// Database schema definition for Tinqer
-// This provides type-safe queries with the Tinqer query builder
+// Database type contract checked against the existing Knex migrations.
 
 export type DatabaseSchema = {
   // OAuth identity records

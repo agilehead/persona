@@ -10,16 +10,13 @@ This file provides guidance to Claude Code when working with the Persona OAuth a
 
 ## Service-owned layout
 
-The repository follows Ctlflow's product ownership model. The repository root owns workspace configuration, build orchestration and documentation. Product source, database assets, operations and acceptance tests belong to `services/persona/`. The existing Node implementation retains its behavior and package contracts; it is explicitly selected for comparison and is never a C# fallback.
+The repository follows Ctlflow's product ownership model. The repository root owns workspace configuration, build orchestration and documentation. Product source, database assets, operations and acceptance tests belong to `services/persona/`.
 
 ```text
 services/persona/
   package.json
   node/
-    apps/                     Existing Node application composition roots
-    packages/                 Existing Node libraries and client SDKs
-    tests/                    Node service tests and support
-    Dockerfile
+    packages/                 TypeScript SDK, logger and test tooling
   csharp/
     apps/                     Thin native/managed application roots
     packages/                 Kernel, domain, contracts and adapters
@@ -27,7 +24,7 @@ services/persona/
     build/                    Build-only EF compiler and design-time host
     scripts/                  C# generation/publication tools
     Dockerfile
-  database/persona/sqlite/   Existing Knex migrations and seed assets
+  database/persona/sqlite/    Database contract and existing Knex migrations
   knexfile.persona.mjs
   docker/                     Development and production configuration
   scripts/                    Shared product generators, operations and acceptance
@@ -40,9 +37,9 @@ Only implemented capabilities receive directories. Public package names, wire co
 
 ## Canonical server architecture
 
-The application server is C# / NativeAOT under `services/persona/csharp/`, with the same apps/packages/build/scripts/tests structure and pinned build infrastructure as Snapped. Read `README.md` and `services/persona/csharp/README.md` for current commands and architecture. The Node server is retained for explicit comparison, not as a runtime fallback. The TypeScript client SDK and Knex migrations remain Node-owned.
+The application server is C# under `services/persona/csharp/`, with the same apps/packages/build/scripts/tests structure and pinned build infrastructure as Snapped. Managed .NET and NativeAOT use the same source. Read `README.md` and `services/persona/csharp/README.md` for current commands and architecture. The TypeScript client SDK and Knex migrations remain Node-owned.
 
-C# uses functional static modules, immutable domain records, function-delegate persistence ports, `Result<T>`, cancellation and `IUnitOfWork.Run`. Classes are used where EF, ASP.NET, GraphQL or provider frameworks require them. Database queries use EF LINQ in C# and Tinqer in Node; handwritten runtime SQL is forbidden. Generated EF rows are separate from domain records. Existing database schema and representations are preserved; identity IDs are base62 strings, not UUIDs.
+C# uses functional static modules, immutable domain records, function-delegate persistence ports, `Result<T>`, cancellation and `IUnitOfWork.Run`. Classes are used where EF, ASP.NET, GraphQL or provider frameworks require them. Database queries use EF LINQ; handwritten runtime SQL is forbidden. Generated EF rows are separate from domain records. Existing database schema and representations are preserved; identity IDs are base62 strings, not UUIDs.
 
 Required verification: `npm run build`, `npm run lint`, `npm run build:native`, `npm test`, then `npm run test:integration`. Execute real NativeAOT binaries and both Docker variants; successful managed tests alone are insufficient. Never run broad process killers for acceptance. Keep private `.analysis/` notes ignored and preserve production data. Do not publish, deploy or push without the applicable user authorization.
 
@@ -189,9 +186,8 @@ When you encounter linting, type, or test errors, the solution is ALWAYS to fix 
 
 ### Database Conventions
 
-- **SQLite** for development/initial deployment (via Tinqer)
-- **Persistence** - EF LINQ in C#; Tinqer in Node; never write runtime SQL
-- **Repository Pattern** - Interfaces with SQLite implementation
+- **SQLite** for persistence, using EF LINQ in the C# application
+- **Repository Pattern** - Functional ports with a SQLite implementation
 - **Singular table names**: lowercase (e.g., `identity`, `session`)
 - **Column names**: snake_case for all columns
 - **Primary keys** preserve the existing stored identifier formats
@@ -249,7 +245,8 @@ npm run migrate:persona:rollback
 npm test
 
 # Run specific tests
-npm run test:grep -- "pattern to match"
+node services/persona/scripts/test-services.mjs csharp
+node services/persona/scripts/test-services.mjs nativeaot
 ```
 
 ### Git Workflow
@@ -283,21 +280,7 @@ After pushing a feature branch, provide this URL to the user so they can create 
 
 ### Project Structure
 
-```
-persona/
-├── services/persona/node/                    # Monorepo packages
-│   └── packages/
-│       ├── persona-server/  # Express API server
-│       ├── persona-db/      # Database layer
-│       ├── persona-logger/  # Structured logging
-│       └── persona-test-utils/ # Test utilities
-├── database/                # Migrations
-│   └── persona/
-│       ├── knexfile.js      # Knex configuration
-│       └── migrations/      # SQLite migrations
-├── scripts/                 # Build and utility scripts
-└── docs/                    # Documentation
-```
+See the service-owned layout above for the current application, client, database and test owners.
 
 ### Temporary Directories (gitignored)
 
@@ -327,24 +310,7 @@ Tenant is stored in:
 
 ### Repository Pattern
 
-```typescript
-// Interface
-export type IIdentityRepository = {
-  findById: (id: string) => Promise<Result<Identity>>;
-  findByEmail: (tenantId: string, email: string) => Promise<Result<Identity>>;
-  create: (data: CreateIdentityData) => Promise<Result<Identity>>;
-};
-
-// Implementation
-export function createIdentityRepository(db: Database): IIdentityRepository {
-  return {
-    findById: async (id) => {
-      // Tinqer query implementation
-    },
-    // ...
-  };
-}
-```
+The domain owns immutable function-delegate ports; the SQLite adapter implements them using EF LINQ, cancellation and `Result<T>`.
 
 ## Environment Variables
 
@@ -373,69 +339,11 @@ See `.env.example` for complete list. Key variables:
 
 - `PERSONA_DATA_DIR` - Directory for SQLite database (REQUIRED)
 
-## Code Patterns
-
-### Import Patterns
-
-```typescript
-// Always include .js extension
-import { createIdentityRepository } from "./repositories/identity.js";
-import type { Result } from "./types.js";
-```
-
-### Result Type Pattern
-
-```typescript
-export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E };
-
-export async function doSomething(): Promise<Result<Data>> {
-  if (error) {
-    return {
-      success: false,
-      error: new Error("Description"),
-    };
-  }
-  return { success: true, data: result };
-}
-```
-
-### Tinqer Query Pattern
-
-```typescript
-import { createSchema, executeSelect } from "@tinqerjs/tinqer";
-
-const schema = createSchema<DatabaseSchema>();
-
-export async function getIdentity(db: Database, identityId: string) {
-  const identities = await executeSelect(
-    db,
-    schema,
-    (q, p) =>
-      q
-        .from("identity")
-        .where((i) => i.id === p.identityId)
-        .select((i) => ({
-          id: i.id,
-          email: i.email,
-          tenant_id: i.tenant_id,
-        }))
-        .take(1),
-    { identityId }
-  );
-
-  return identities.length > 0
-    ? { success: true, data: identities[0] }
-    : { success: false, error: new Error("Identity not found") };
-}
-```
-
 ## Testing Strategy
 
 ### Unit Tests
 
-- Repository functions
-- Token service
-- Auth service
+- C# probes cover repository operations, tokens, sessions, Google validation and redirect/cookie security.
 
 ### Integration Tests
 

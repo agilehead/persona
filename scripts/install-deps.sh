@@ -16,9 +16,8 @@ echo "=== Installing Persona Dependencies ==="
 # Define the package order (same as build order)
 PACKAGES=(
   "persona-logger"
-  "persona-db"
   "persona-test-utils"
-  "persona-server"
+  "persona-client"
 )
 
 # Install root deps (once)
@@ -30,7 +29,6 @@ fi
 # Loop through every package in order
 for pkg_name in "${PACKAGES[@]}"; do
   pkg="services/persona/node/packages/$pkg_name"
-  if [[ "$pkg_name" == "persona-server" ]]; then pkg="services/persona/node/apps/server"; fi
   if [[ ! -d "$pkg" ]]; then
     echo "Package $pkg not found, skipping."
     continue

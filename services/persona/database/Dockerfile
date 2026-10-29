@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --workspaces=false
 
 FROM node:24.22.1-alpine AS migrations
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY --from=dependencies /app/node_modules ./node_modules

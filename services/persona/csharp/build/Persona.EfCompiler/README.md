@@ -64,3 +64,20 @@ two differently converted columns and checks both stored representations.
 It also verifies converted JSON readers/writes, strict integer booleans and
 empty/nonempty interface collections without changing queries to avoid a compiler
 gap. Product queries still use the generated compiled model and interceptors.
+
+Static query locals and aliases are resolved to their single initializer at build
+time. Shared operator locations emit one interceptor. Generated operators extend
+an immutable parameter-binding chain; each terminal forks fresh execution state.
+Captured lambda values are read at execution, while ordinary operator arguments
+(such as Skip/Take) retain their call-time values. This is the same generated
+query representation for inline and reusable queries, with no dynamic query
+provider or managed fallback. Reassigned/query-producing runtime graphs remain
+unsupported and fail publication. Tuple writes and query references that escape by ref or out are rejected as well. The shared native compiler regression fixture verifies
+repeated execution, live captures, independent branches, projection and
+cancellation isolation as well as exact stored converter values.
+
+Complete object initializers retain public construction when all required members
+are assigned, including nested initializers. Compiled-model helper namespaces
+and filenames belong to their DbContext, preventing collisions when models use
+the same entity names. The same build-only compiler implementation is maintained
+in Snapped, Lesser, Persona, TapTap and MsgCore.

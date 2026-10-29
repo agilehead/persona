@@ -19,6 +19,8 @@ RUN dotnet publish "services/persona/csharp/apps/$PERSONA_APP/$PERSONA_APP.cspro
     && chmod +x /managed/persona
 
 FROM mcr.microsoft.com/dotnet/aspnet:11.0.0-rc.2@sha256:623c52ed3fad0fa423b8cc860910492364b0d6245870a415e997017d4a4f4513 AS managed
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /usr/bin/pebble
 WORKDIR /app
 COPY --from=managed-build /managed ./
 USER 0
@@ -27,6 +29,8 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 CMD ["/ap
 ENTRYPOINT ["/app/persona"]
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:11.0.0-rc.2@sha256:fccbc81aefc5cb3f40373a99844b0950d71eabd49225ce4442a5fcf11917acee AS nativeaot
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /usr/bin/pebble
 WORKDIR /app
 COPY --from=native-build /native ./
 USER 0

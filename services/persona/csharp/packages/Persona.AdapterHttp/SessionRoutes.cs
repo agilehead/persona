@@ -40,7 +40,7 @@ public static partial class SessionRoutes
         var validated = await tokens.ValidateRefresh(refresh, context.RequestAborted);
         if (!validated.IsSuccess)
         {
-            Http.ClearTokens(context);
+            Http.ClearTokens(context, settings);
             await Http.Error(context, 401, validated.Error!.Message);
             return;
         }

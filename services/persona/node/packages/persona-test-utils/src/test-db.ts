@@ -78,7 +78,10 @@ export async function setupTestDatabase(testDb: TestDatabase): Promise<void> {
       connection: { filename: testDb.dbPath },
       useNullAsDefault: true,
       migrations: {
-        directory: join(PROJECT_ROOT, "services/persona/database/persona/sqlite/migrations"),
+        directory: join(
+          PROJECT_ROOT,
+          "services/persona/database/persona/sqlite/migrations",
+        ),
       },
     });
     await testDb.knex.migrate.latest();

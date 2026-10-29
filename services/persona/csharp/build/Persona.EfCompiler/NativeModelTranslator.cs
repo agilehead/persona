@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using System.Runtime.CompilerServices;
 
 namespace Persona.Build.Ef;
 
@@ -16,6 +17,32 @@ public sealed class NativeModelTranslator(SyntaxGenerator generator, IModel mode
 {
     private readonly NativeSqlQuoter _quoter = new(model);
     private string? _commandText;
+    private NewExpression? _initializedConstructor;
+
+    protected override Expression VisitMemberInit(MemberInitExpression initializer)
+    {
+        // A complete initializer satisfies C# required members. Upstream instead
+        // emits an unsafe constructor invocation, then expects it to be a new
+        // expression when adding the initializer. Retain normal construction
+        // for public constructors whose required members are all assigned here.
+        var previous = _initializedConstructor;
+        var assigned = initializer.Bindings.OfType<MemberAssignment>()
+            .Select(binding => binding.Member).ToHashSet();
+        _initializedConstructor = initializer.NewExpression.Constructor is { IsPublic: true }
+            && RequiredMembers(initializer.Type).All(assigned.Contains)
+            ? initializer.NewExpression : null;
+        try { return base.VisitMemberInit(initializer); }
+        finally { _initializedConstructor = previous; }
+    }
+
+    private static IEnumerable<MemberInfo> RequiredMembers(Type type)
+    {
+        for (Type? current = type; current is not null; current = current.BaseType)
+            foreach (var member in current.GetMembers(BindingFlags.Instance | BindingFlags.Public
+                | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                if (member.IsDefined(typeof(RequiredMemberAttribute), inherit: false)) yield return member;
+    }
+
 
     protected override ExpressionSyntax GenerateUnknownValue(object value)
         => value is IRelationalQuotableExpression quotable
@@ -42,7 +69,11 @@ public sealed class NativeModelTranslator(SyntaxGenerator generator, IModel mode
             arguments[2] = _quoter.QuoteMapping(mapping);
             expression = expression.Update(arguments);
         }
-        return base.VisitNew(expression);
+        var result = base.VisitNew(expression);
+        if (ReferenceEquals(expression, _initializedConstructor)
+            && Result is InvocationExpressionSyntax invocation)
+            Result = SyntaxFactory.ObjectCreationExpression(Generate(expression.Type), invocation.ArgumentList, initializer: null);
+        return result;
     }
 
     // EF can represent SQL NULL with a non-nullable CLR type. Upstream's

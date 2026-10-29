@@ -18,9 +18,7 @@ echo "=== Building Persona ==="
 # Define the build order
 PACKAGES=(
   "persona-logger"
-  "persona-db"
   "persona-test-utils"
-  "persona-server"
   "persona-client"
 )
 
@@ -43,7 +41,6 @@ fi
 # 3 ▸ build each package that defines a build script, in order
 for pkg_name in "${PACKAGES[@]}"; do
   pkg="services/persona/node/packages/$pkg_name"
-  if [[ "$pkg_name" == "persona-server" ]]; then pkg="services/persona/node/apps/server"; fi
   if [[ ! -f "$pkg/package.json" ]]; then
     continue
   fi
@@ -60,7 +57,6 @@ done
 echo "Verifying test files compile with strict mode…"
 for pkg_name in "${PACKAGES[@]}"; do
   pkg="services/persona/node/packages/$pkg_name"
-  if [[ "$pkg_name" == "persona-server" ]]; then pkg="services/persona/node/apps/server"; fi
   if [[ ! -f "$pkg/package.json" ]]; then
     continue
   fi

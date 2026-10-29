@@ -51,3 +51,6 @@ services/persona/docker/development/data/
 /services/persona/csharp/**/bin/
 /services/persona/csharp/**/obj/
 artifacts/
+
+# Private local notes at every depth.
+**/.analysis/
