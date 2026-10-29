@@ -285,6 +285,7 @@ export async function contracts({
         headers: {
           "content-type": "application/json",
           cookie: "refresh_token=invalid",
+          origin: "http://localhost:3000",
         },
       },
     );
@@ -292,6 +293,65 @@ export async function contracts({
     assert.equal(response.body.error, "Invalid refresh token");
     assert.equal(response.headers.getSetCookie().length, 2);
   });
+  await check(
+    "session mutations reject hostile, opaque and missing cookie origins before any change",
+    async () => {
+      const before = database.db
+        .prepare("SELECT * FROM session WHERE id = ?")
+        .get("contract-session");
+      for (const endpoint of [
+        "/logout",
+        "/token/refresh",
+        "/auth/login" + tenant,
+      ]) {
+        for (const origin of [
+          "https://hostile.example",
+          "null",
+          "http://localhost:3000.hostile.example",
+          undefined,
+        ]) {
+          const response = await fetch(url + endpoint, {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              cookie: "refresh_token=" + seedRefresh,
+              ...(origin === undefined ? {} : { origin }),
+            },
+            body: "refreshToken=ignored&username=alice&password=alice-secret",
+          });
+          assert.equal(response.status, 403);
+          assert.deepEqual(response.headers.getSetCookie(), []);
+          assert.deepEqual(
+            database.db
+              .prepare("SELECT * FROM session WHERE id = ?")
+              .get("contract-session"),
+            before,
+          );
+        }
+      }
+      const allowed = await request(
+        "/token/refresh",
+        {},
+        {
+          headers: {
+            "content-type": "application/json",
+            cookie: "refresh_token=" + seedRefresh,
+            origin: "http://localhost:3000",
+          },
+        },
+      );
+      assert.equal(allowed.status, 200);
+      assert.equal(
+        allowed.headers.get("access-control-allow-origin"),
+        "http://localhost:3000",
+      );
+      assert.equal(
+        (await request("/token/refresh", { refreshToken: seedRefresh })).status,
+        200,
+        "Non-browser token clients do not require ambient cookies or a browser origin",
+      );
+    },
+  );
   await check("refresh missing and invalid", async () => {
     assert.equal(
       (await request("/token/refresh", {})).body.error,
@@ -516,6 +576,7 @@ export async function contracts({
         headers: {
           "content-type": "application/json",
           cookie: "refresh_token=" + token,
+          origin: "http://localhost:3000",
         },
       },
     );
