@@ -2,7 +2,7 @@ namespace Persona.AdapterRuntime;
 
 public sealed record Settings(string Host, int Port, string PublicUrl, string DatabasePath,
     string JwtSecret, string InternalSecret, string AccessExpiry, string RefreshExpiry,
-    string? CookieDomain, string TenantMode, string[] Tenants, string[] CorsOrigins,
+    string? CookieDomain, string? AccessCookieDomain, string TenantMode, string[] Tenants, string[] CorsOrigins,
     string? DevUsers, string? RuntimeEnvironment, string? GoogleClientId, string? GoogleClientSecret, string? GoogleRedirectUri)
 {
     public bool Production => RuntimeEnvironment == "production";
@@ -17,6 +17,7 @@ public sealed record Settings(string Host, int Port, string PublicUrl, string Da
             Required("PERSONA_SERVER_PUBLIC_URL"), Path.GetFullPath(Path.Combine(Required("PERSONA_DATA_DIR"), "persona.db")),
             Required("PERSONA_JWT_SECRET"), Required("PERSONA_INTERNAL_SECRET"), Optional("PERSONA_ACCESS_TOKEN_EXPIRY", "15m"),
             Optional("PERSONA_REFRESH_TOKEN_EXPIRY", "7d"), Environment.GetEnvironmentVariable("PERSONA_COOKIE_DOMAIN"),
+            Environment.GetEnvironmentVariable("PERSONA_ACCESS_COOKIE_DOMAIN"),
             mode, tenants, Optional("PERSONA_CORS_ORIGINS", "").Split(',').Select(value => value.Trim()).Where(value => value.Length > 0).ToArray(),
             Environment.GetEnvironmentVariable("PERSONA_DEV_USERS"), Environment.GetEnvironmentVariable("NODE_ENV"),
             string.IsNullOrEmpty(google) ? null : google,

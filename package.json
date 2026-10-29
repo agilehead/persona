@@ -7,7 +7,6 @@
   "workspaces": [
     "services/*",
     "services/*/apps/*",
-    "services/*/node/apps/*",
     "services/*/node/packages/*"
   ],
   "scripts": {
@@ -15,31 +14,26 @@
     "clean": "./scripts/clean.sh",
     "start": "./services/persona/scripts/start.sh",
     "test": "node services/persona/scripts/test-services.mjs",
-    "test:grep": "cd services/persona/node/apps/server && npm run test:grep",
     "migrate:persona:latest": "knex migrate:latest --knexfile services/persona/knexfile.persona.mjs",
     "migrate:persona:rollback": "knex migrate:rollback --knexfile services/persona/knexfile.persona.mjs",
     "migrate:persona:status": "knex migrate:status --knexfile services/persona/knexfile.persona.mjs",
     "migrate:persona:make": "knex migrate:make --knexfile services/persona/knexfile.persona.mjs",
     "build:native": "node services/persona/csharp/scripts/publish-native.mjs",
     "lint": "./scripts/lint-all.sh && ./node_modules/.bin/eslint \"services/persona/**/*.mjs\"",
-    "test:node": "cd services/persona/node/apps/server && npm test",
     "test:contracts": "node services/persona/scripts/test-services.mjs",
     "format": "./scripts/format-all.sh",
     "generate:model": "node services/persona/csharp/scripts/generate-model.mjs",
     "test:integration": "./services/persona/scripts/test-integration.sh compose",
-    "start:node": "./services/persona/scripts/start.sh node",
     "start:nativeaot": "./services/persona/scripts/start.sh nativeaot",
     "verify:structure": "node scripts/verify-structure.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "@types/chai": "^5.2.3",
-    "@types/mocha": "^10.0.10",
     "@types/node": "^26.0.0",
     "chai": "^6.0.0",
     "eslint": "^10.0.0",
     "globals": "^17.0.0",
-    "mocha": "^11.7.1",
     "prettier": "^3.4.2",
     "typescript": "^6.0.0",
     "typescript-eslint": "^8.19.1"
@@ -64,5 +58,9 @@
     "typescript"
   ],
   "author": "Agilehead",
-  "license": "MIT"
+  "license": "MIT",
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.1": true
+  }
 }

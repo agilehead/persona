@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from "mocha";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import { expect } from "chai";
 import { createPersonaClient, createNoOpPersonaClient } from "../client.js";
 import type { PersonaConfig } from "../types.js";
@@ -11,7 +11,7 @@ function first<T>(values: readonly T[]): T {
   return value;
 }
 
-describe("PersonaClient", () => {
+void describe("PersonaClient", () => {
   let fetchCalls: FetchCall[];
   let fetchResponse: { status: number; body: unknown };
   const originalFetch = globalThis.fetch;
@@ -48,9 +48,9 @@ describe("PersonaClient", () => {
     globalThis.fetch = originalFetch;
   });
 
-  describe("createPersonaClient", () => {
-    describe("linkIdentityToUser", () => {
-      it("should make correct POST request", async () => {
+  void describe("createPersonaClient", () => {
+    void describe("linkIdentityToUser", () => {
+      void it("should make correct POST request", async () => {
         fetchResponse = {
           status: 200,
           body: {
@@ -96,7 +96,7 @@ describe("PersonaClient", () => {
         expect(body.roles).to.deep.equal(["USER"]);
       });
 
-      it("should include tenant query param when configured", async () => {
+      void it("should include tenant query param when configured", async () => {
         fetchResponse = { status: 200, body: { success: true } };
 
         const tenantConfig: PersonaConfig = {
@@ -110,8 +110,8 @@ describe("PersonaClient", () => {
       });
     });
 
-    describe("updateUserRoles", () => {
-      it("should make correct PUT request", async () => {
+    void describe("updateUserRoles", () => {
+      void it("should make correct PUT request", async () => {
         fetchResponse = {
           status: 200,
           body: { success: true, updatedCount: 1 },
@@ -142,8 +142,8 @@ describe("PersonaClient", () => {
       });
     });
 
-    describe("revokeUserSessions", () => {
-      it("should make correct DELETE request", async () => {
+    void describe("revokeUserSessions", () => {
+      void it("should make correct DELETE request", async () => {
         fetchResponse = {
           status: 200,
           body: { success: true, revokedCount: 3 },
@@ -165,8 +165,8 @@ describe("PersonaClient", () => {
       });
     });
 
-    describe("error handling", () => {
-      it("should return failure on non-200 response", async () => {
+    void describe("error handling", () => {
+      void it("should return failure on non-200 response", async () => {
         fetchResponse = {
           status: 404,
           body: { error: "Identity not found" },
@@ -183,7 +183,7 @@ describe("PersonaClient", () => {
         }
       });
 
-      it("should return failure on network error", async () => {
+      void it("should return failure on network error", async () => {
         globalThis.fetch = () => {
           return Promise.reject(new Error("Connection refused"));
         };
@@ -201,8 +201,8 @@ describe("PersonaClient", () => {
     });
   });
 
-  describe("createNoOpPersonaClient", () => {
-    it("should return failure for all methods", async () => {
+  void describe("createNoOpPersonaClient", () => {
+    void it("should return failure for all methods", async () => {
       const client = createNoOpPersonaClient();
 
       const link = await client.linkIdentityToUser("id", "user", ["USER"]);
@@ -215,7 +215,7 @@ describe("PersonaClient", () => {
       expect(revoke.success).to.equal(false);
     });
 
-    it("should log warnings when logger provided", async () => {
+    void it("should log warnings when logger provided", async () => {
       const warnings: unknown[][] = [];
       const logger = {
         debug: () => undefined,

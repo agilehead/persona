@@ -106,10 +106,17 @@ public class PersonaCSharpToLinqTranslator : CSharpSyntaxVisitor<Expression>
 
         // Perform data flow analysis to detect all variables flowing into the query (e.g. captured variables)
         _dataFlowsIn.Clear();
-        var flow = _semanticModel.AnalyzeDataFlow(node);
-        foreach (var flowsIn in flow.DataFlowsIn.Concat(flow.ReadInside.Except(flow.VariablesDeclared, SymbolEqualityComparer.Default)))
+        var pending = new Queue<SyntaxNode>();
+        var visited = new HashSet<SyntaxNode>();
+        pending.Enqueue(node);
+        while (pending.TryDequeue(out var input))
         {
-            if (flowsIn is ILocalSymbol or IParameterSymbol) _dataFlowsIn[flowsIn] = null;
+            if (!visited.Add(input)) continue;
+            var flow = _semanticModel.AnalyzeDataFlow(input);
+            foreach (var flowsIn in flow.DataFlowsIn.Concat(flow.ReadInside.Except(flow.VariablesDeclared, SymbolEqualityComparer.Default)))
+                if (flowsIn is ILocalSymbol or IParameterSymbol) _dataFlowsIn[flowsIn] = null;
+            foreach (var identifier in input.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+                if (QueryLocals.TryInitializer(identifier, _semanticModel, out var initializer)) pending.Enqueue(initializer);
         }
 
         var result = Visit(node);
@@ -411,6 +418,9 @@ public class PersonaCSharpToLinqTranslator : CSharpSyntaxVisitor<Expression>
         {
             return parameter;
         }
+
+        if (QueryLocals.TryInitializer(identifierName, _semanticModel, out var queryInitializer))
+            return Visit(queryInitializer);
 
         var symbol = _semanticModel.GetSymbolInfo(identifierName).Symbol;
 

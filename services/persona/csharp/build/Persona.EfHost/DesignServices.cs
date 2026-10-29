@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.EntityFrameworkCore.Scaffolding;
 
 [assembly: DesignTimeServicesReference("Persona.EfHost.DesignServices, Persona.EfHost")]
 
@@ -14,5 +15,8 @@ namespace Persona.EfHost;
 public sealed class DesignServices : IDesignTimeServices
 {
     public void ConfigureDesignTimeServices(IServiceCollection services)
-        => services.Replace(ServiceDescriptor.Singleton<IPrecompiledQueryCodeGenerator, PersonaPrecompiledQueryCodeGenerator>());
+    {
+        services.Replace(ServiceDescriptor.Singleton<IPrecompiledQueryCodeGenerator, PersonaPrecompiledQueryCodeGenerator>());
+        services.Replace(ServiceDescriptor.Singleton<ICompiledModelCodeGenerator, NativeCompiledModelGenerator>());
+    }
 }

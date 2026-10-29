@@ -8,7 +8,6 @@ import {
   createTestDatabase,
   setupTestDatabase,
   teardownTestDatabase,
-  truncateAllTables,
 } from "../node/packages/persona-test-utils/dist/index.js";
 import { repository, run } from "./runtime-targets.mjs";
 import { contracts } from "../tests/contracts/http.mjs";
@@ -22,10 +21,10 @@ import {
 const selection =
   process.argv[2] ?? process.env.PERSONA_DOTNET_CONTAINER_TARGET ?? "all";
 assert(
-  ["all", "nativeaot", "managed", "node"].includes(selection),
-  "Choose all, nativeaot, managed or node",
+  ["all", "nativeaot", "managed"].includes(selection),
+  "Choose all, nativeaot or managed",
 );
-const variants = selection === "all" ? ["node", "managed", "nativeaot"] : [selection];
+const variants = selection === "all" ? ["managed", "nativeaot"] : [selection];
 const migrationImage = "persona-migrations:acceptance";
 const docker = (args, env = process.env) =>
   execFileSync("docker", args, {
@@ -34,9 +33,19 @@ const docker = (args, env = process.env) =>
     encoding: "utf8",
   }).trim();
 function storedRows(database) {
-  return database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(({ name }) => [name,
-    database.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all().map(row => JSON.stringify(row)).sort(),
-  ]);
+  return database
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    )
+    .all()
+    .map(({ name }) => [
+      name,
+      database
+        .prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`)
+        .all()
+        .map((row) => JSON.stringify(row))
+        .sort(),
+    ]);
 }
 async function freePort() {
   const socket = createServer();
@@ -66,9 +75,9 @@ for (const variant of variants) {
     "docker",
     "build",
     "-f",
-    variant === "node" ? "services/persona/node/Dockerfile" : "services/persona/csharp/Dockerfile",
+    "services/persona/csharp/Dockerfile",
     "--target",
-    variant === "node" ? "production" : variant,
+    variant,
     "-t",
     image,
     ".",
@@ -105,22 +114,34 @@ for (const variant of variants) {
       "-f",
       "services/persona/docker/development/docker-compose.yml",
     ];
-    if (variant === "node") {
-      const override = join(database.testDir, "node-health.json");
-      writeFileSync(override, JSON.stringify({ services: { persona: { healthcheck: { test: ["CMD", "node", "-e", "require('http').get('http://localhost:5005/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"] } } } }));
-      compose.push("-f", override);
-    }
     let initialized = false;
     try {
       await run(["docker", ...compose, "run", "--rm", "persona-migrations"], {
         env,
       });
-      const migrated = new Database(database.dbPath, { readonly: true, fileMustExist: true });
+      const migrated = new Database(database.dbPath, {
+        readonly: true,
+        fileMustExist: true,
+      });
       try {
-        assert.deepEqual(migrated.prepare("SELECT name FROM knex_migrations ORDER BY name").all().map(row => row.name),
-          readdirSync(join(repository, "services/persona/database/persona/sqlite/migrations")).filter(name => name.endsWith(".js")).sort(),
-          "The migration image creates the schema in the actual mounted application database");
-      } finally { migrated.close(); }
+        assert.deepEqual(
+          migrated
+            .prepare("SELECT name FROM knex_migrations ORDER BY name")
+            .all()
+            .map((row) => row.name),
+          readdirSync(
+            join(
+              repository,
+              "services/persona/database/persona/sqlite/migrations",
+            ),
+          )
+            .filter((name) => name.endsWith(".js"))
+            .sort(),
+          "The migration image creates the schema in the actual mounted application database",
+        );
+      } finally {
+        migrated.close();
+      }
       await setupTestDatabase(database);
       initialized = true;
       await database.knex.destroy();
@@ -150,7 +171,6 @@ for (const variant of variants) {
         docker(["inspect", "--format", "{{.State.Health.Status}}", container]),
         "healthy",
       );
-      if (variant !== "node") {
       docker(["exec", container, "/app/persona", "health"]);
       docker([
         "exec",
@@ -159,7 +179,6 @@ for (const variant of variants) {
         "-c",
         "if command -v node; then exit 1; fi",
       ]);
-      }
       if (variant === "nativeaot") {
         docker([
           "exec",
@@ -191,21 +210,6 @@ for (const variant of variants) {
       } finally {
         inspect.close();
       }
-      if (mode === modes[0]) {
-        await run(
-          ["npm", "run", "test", "--workspace", "@agilehead/persona-server"],
-          {
-            env: {
-              ...process.env,
-              ...fixture,
-              TEST_URL: url,
-              TEST_DB_PATH: database.dbPath,
-              TEST_CRON_SECRET: internalSecret,
-            },
-          },
-        );
-        truncateAllTables(database);
-      }
       passed += await contracts({
         url,
         database,
@@ -229,10 +233,23 @@ for (const variant of variants) {
         "Container shuts down cleanly",
       );
       const persisted = storedRows(database.db);
-      await run(["docker", ...compose, "run", "--rm", "persona-migrations"], { env });
-      assert.deepEqual(storedRows(database.db), persisted, "Re-running the migration image preserves every existing row and migration record");
-      assert.deepEqual(database.db.prepare("SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").all(), schema,
-        "Re-running the migration image preserves the complete schema");
+      await run(["docker", ...compose, "run", "--rm", "persona-migrations"], {
+        env,
+      });
+      assert.deepEqual(
+        storedRows(database.db),
+        persisted,
+        "Re-running the migration image preserves every existing row and migration record",
+      );
+      assert.deepEqual(
+        database.db
+          .prepare(
+            "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name",
+          )
+          .all(),
+        schema,
+        "Re-running the migration image preserves the complete schema",
+      );
     } catch (error) {
       await run(["docker", ...compose, "logs", "--tail", "100"], { env });
       throw error;
@@ -243,7 +260,7 @@ for (const variant of variants) {
   }
   total += passed;
   console.info(
-    `persona Docker ${variant}: ${passed} shared HTTP contract cases passed; healthy and clean shutdown; ${variant === "node" ? "explicit Node comparison image" : "no Node in the application image"}`,
+    `persona Docker ${variant}: ${passed} shared HTTP contract cases passed; healthy and clean shutdown; no Node in the application image`,
   );
 }
 console.info(`persona Docker: ${total} shared HTTP contract cases passed`);

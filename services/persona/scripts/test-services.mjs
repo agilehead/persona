@@ -15,16 +15,14 @@ import {
   modes,
   secret,
   internalSecret,
-  nodeArguments,
 } from "../tests/contracts/fixture.mjs";
 
 const selected = process.argv[2] ?? "all";
 assert(
-  ["all", "node", "csharp", "nativeaot"].includes(selected),
-  "Choose all, node, csharp or nativeaot",
+  ["all", "csharp", "nativeaot"].includes(selected),
+  "Choose all, csharp or nativeaot",
 );
-const targets =
-  selected === "all" ? ["node", "csharp", "nativeaot"] : [selected];
+const targets = selected === "all" ? ["csharp", "nativeaot"] : [selected];
 async function freePort() {
   const socket = createServer();
   await new Promise((resolve, reject) => {
@@ -64,7 +62,6 @@ for (const target of targets) {
       const url = `http://127.0.0.1:${port}`;
       const env = { ...process.env, ...environment(port, database, mode) };
       const command_ = command(target);
-      if (target === "node") command_.splice(1, 0, ...nodeArguments);
       server = spawn(command_[0], command_.slice(1), {
         cwd: repository,
         env,
@@ -81,20 +78,6 @@ for (const target of targets) {
       } finally {
         inspect.close();
       }
-      if (mode === modes[0]) {
-        await run(
-          ["npm", "run", "test", "--workspace", "@agilehead/persona-server"],
-          {
-            env: {
-              ...env,
-              TEST_URL: url,
-              TEST_DB_PATH: database.dbPath,
-              TEST_CRON_SECRET: internalSecret,
-            },
-          },
-        );
-        truncateAllTables(database);
-      }
       targetTotal += await contracts({
         url,
         database,
@@ -104,7 +87,7 @@ for (const target of targets) {
       });
       await stop(server);
       server = null;
-      if (mode === modes[0] && target !== "node") {
+      if (mode === modes[0]) {
         truncateAllTables(database);
         await run([...command(target, "ContractProbe"), database.dbPath]);
       }
@@ -126,5 +109,5 @@ for (const target of targets) {
   console.info(`${target}: ${targetTotal} shared HTTP contract cases passed`);
 }
 console.info(
-  `persona: ${total} shared HTTP contract cases passed; retained suites contain Node-only tests and are reported separately`,
+  `persona: ${total} HTTP contract cases passed across ${targets.join(", ")}`,
 );

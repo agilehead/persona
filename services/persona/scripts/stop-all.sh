@@ -8,9 +8,6 @@ docker compose -f services/persona/docker/development/docker-compose.yml stop pe
 while read -r pid executable arguments; do
   [[ "$(readlink "/proc/$pid/cwd" 2>/dev/null || true)" == "$ROOT_DIR" ]] || continue
   case "$executable" in
-    node|*/node)
-      [[ "$arguments" == *"services/persona/node/apps/server/dist/bin/server.js"* ]] || continue
-      ;;
     dotnet|*/dotnet)
       [[ "$arguments" == *"services/persona/csharp/apps/Persona.Server/"*"Persona.Server.dll"* ]] || continue
       ;;

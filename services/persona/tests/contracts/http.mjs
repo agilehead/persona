@@ -107,6 +107,39 @@ export async function contracts({
         : "tenant parameter not allowed in single-tenant mode",
     );
   });
+  await check(
+    "tenant validation rejects empty, duplicate and unconfigured values",
+    async () => {
+      const path = "/internal/identity/missing/link";
+      for (const query of [
+        "?tenant=",
+        "?tenant=unknown",
+        "?tenant=app1&tenant=app2",
+        "?tenant=app%2F1",
+      ]) {
+        const response = await request(
+          path + query,
+          { userId: "alice", roles: ["USER"] },
+          auth,
+        );
+        assert.equal(response.status, 400);
+      }
+      if (mode === "multi") {
+        for (const query of ["?tenant=app1", "?tenant=app%32"]) {
+          const response = await request(
+            path + query,
+            { userId: "alice", roles: ["USER"] },
+            auth,
+          );
+          assert.equal(
+            response.status,
+            404,
+            "configured tenants pass boundary validation",
+          );
+        }
+      }
+    },
+  );
   await check("unknown identity", async () => {
     const response = await request(
       "/internal/identity/missing/link" + tenant,
@@ -372,6 +405,15 @@ export async function contracts({
   await check("development credentials validated", async () => {
     assert.equal((await request("/auth/login" + tenant, {})).status, 400);
     assert.equal(
+      (await request("/auth/login" + tenant, { username: "alice" })).status,
+      400,
+    );
+    assert.equal(
+      (await request("/auth/login" + tenant, { password: "alice-secret" }))
+        .status,
+      400,
+    );
+    assert.equal(
       (
         await request("/auth/login" + tenant, {
           username: "alice",
@@ -394,6 +436,24 @@ export async function contracts({
         await request("/auth/login" + tenant, {
           username: "alice",
           password: "wild-secret",
+        })
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await request("/auth/login" + tenant, {
+          username: "Alice",
+          password: "alice-secret",
+        })
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await request("/auth/login" + tenant, {
+          username: "unknown",
+          password: "wrong",
         })
       ).status,
       401,

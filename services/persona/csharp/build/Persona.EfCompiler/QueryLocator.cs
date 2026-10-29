@@ -104,6 +104,14 @@ public class PersonaQueryLocator : CSharpSyntaxWalker
     /// </summary>
     public override void VisitInvocationExpression(InvocationExpressionSyntax invocation)
     {
+        // A query-local initializer is visited independently of its later terminal.
+        // Its predicate subqueries belong to that outer graph, never standalone executors.
+        foreach (var lambda in invocation.Ancestors().OfType<LambdaExpressionSyntax>())
+            if (lambda.Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax owner } }
+                && _semanticModel.GetSymbolInfo(owner, _cancellationToken).Symbol is IMethodSymbol method
+                && (method.ContainingType.OriginalDefinition.Equals(_symbols.Queryable, SymbolEqualityComparer.Default)
+                    || method.ContainingType.OriginalDefinition.Equals(_symbols.EfQueryableExtensions, SymbolEqualityComparer.Default)))
+                return;
         // TODO: Support non-extension invocation syntax: var blogs = ToList(ctx.Blogs);
         if (invocation.Expression is MemberAccessExpressionSyntax
             {
@@ -246,11 +254,14 @@ public class PersonaQueryLocator : CSharpSyntaxWalker
 
         // Work backwards through the LINQ operator chain until we reach something that isn't a method invocation
         ExpressionSyntax operatorSyntax = query;
-        while (operatorSyntax is InvocationExpressionSyntax
+        while (true)
+        {
+            if (QueryLocals.TryInitializer(operatorSyntax, _semanticModel, out var initializer))
+            { operatorSyntax = initializer; continue; }
+            if (operatorSyntax is not InvocationExpressionSyntax
             {
                 Expression: MemberAccessExpressionSyntax { Expression: var innerExpression }
-            })
-        {
+            }) break;
             if (innerExpression is QueryExpressionSyntax or ParenthesizedExpressionSyntax { Expression: QueryExpressionSyntax })
             {
                 _precompilationErrors.Add(

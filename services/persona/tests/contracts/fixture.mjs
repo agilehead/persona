@@ -17,6 +17,7 @@ export function environment(port, database, mode) {
     PERSONA_ACCESS_TOKEN_EXPIRY: "15m",
     PERSONA_REFRESH_TOKEN_EXPIRY: "7d",
     PERSONA_COOKIE_DOMAIN: "",
+    PERSONA_ACCESS_COOKIE_DOMAIN: "",
     PERSONA_DEV_USERS: "alice:alice-secret,*:wild-secret",
     PERSONA_CORS_ORIGINS: "http://localhost:3000",
     PERSONA_GOOGLE_CLIENT_ID: mode === "multi" ? "test-client" : "",
@@ -25,7 +26,3 @@ export function environment(port, database, mode) {
     LOG_LEVEL: "error",
   };
 }
-export const nodeArguments = [
-  "--import",
-  "./services/persona/node/tests/google-fixture.mjs",
-];
