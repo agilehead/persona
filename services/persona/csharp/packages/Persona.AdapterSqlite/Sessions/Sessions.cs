@@ -32,7 +32,8 @@ public static class Sessions
         (id, expiry, ct) => Storage.Guard(async () =>
         {
             var timestamp = Time.Iso(expiry);
-            return await db.Session.Where(row => row.Id == id).ExecuteUpdateAsync(
+            var now = clock.IsoNow();
+            return await db.Session.Where(row => row.Id == id && row.Revoked == 0 && string.Compare(row.ExpiresAt, now) > 0).ExecuteUpdateAsync(
                 setters => setters.SetProperty(row => row.ExpiresAt, timestamp), ct) > 0;
         }),
         (identity, ct) => Storage.Guard(() => db.Session.Where(row => row.IdentityId == identity)
@@ -43,7 +44,7 @@ public static class Sessions
         ct => Storage.Guard(() =>
         {
             var now = clock.IsoNow();
-            return db.Session.Where(row => string.Compare(row.ExpiresAt, now) < 0).ExecuteDeleteAsync(ct);
+            return db.Session.Where(row => string.Compare(row.ExpiresAt, now) <= 0).ExecuteDeleteAsync(ct);
         }));
 
     public static Session Map(SessionRow row) => new(row.Id, row.IdentityId, row.TenantId, row.TokenHash,

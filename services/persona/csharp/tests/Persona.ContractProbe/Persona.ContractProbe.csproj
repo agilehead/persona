@@ -2,6 +2,9 @@
   <PropertyGroup><OutputType>Exe</OutputType><DbContextType>*</DbContextType></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../packages/Persona.AdapterHttp/Persona.AdapterHttp.csproj" />
+    <ProjectReference Include="../../packages/Persona.AdapterSqlite/Persona.AdapterSqlite.csproj" />
+    <ProjectReference Include="../../packages/Persona.AdapterAuth/Persona.AdapterAuth.csproj" />
+    <ProjectReference Include="../../packages/Persona.AdapterRuntime/Persona.AdapterRuntime.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tasks" PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
   </ItemGroup>

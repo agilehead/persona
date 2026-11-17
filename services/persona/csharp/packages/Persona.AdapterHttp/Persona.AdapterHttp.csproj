@@ -1,9 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <ProjectReference Include="../Persona.AdapterRuntime/Persona.AdapterRuntime.csproj" />
-    <ProjectReference Include="../Persona.AdapterSqlite/Persona.AdapterSqlite.csproj" />
-    <ProjectReference Include="../Persona.AdapterAuth/Persona.AdapterAuth.csproj" />
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Persona.Domain/Persona.Domain.csproj" />
     <ProjectReference Include="../Persona.Contracts/Persona.Contracts.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 </Project>

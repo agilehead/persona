@@ -10,13 +10,22 @@ Use a unit of work for changes that must be atomic.
 
 The C# application queries SQLite through EF LINQ. Generated persistence rows
 are separate from domain records; the database contract and existing Knex
-migrations live under `services/persona/database/persona/sqlite/`. The model
+schema lives under `services/persona/database/persona/sqlite/`. The model
 generator checks that contract against a freshly migrated disposable database.
-Knex owns schema changes. Use forward migrations and preserve existing data and
-stored representations. Never write handwritten SQL in the application.
+Knex owns schema changes. Before deployment, maintain one canonical00 initial
+schema and use fresh disposable test databases. Preserve running databases and
+configuration; do not reset or import prototype state. Actual production changes
+require verified backups and forward migrations. Never write handwritten SQL in the application.
 
 Tables use singular lowercase names; columns use snake_case. Validate values at
-the system boundary and keep authorization in the owning domain or adapter.
+the system boundary and keep business authorization in the owning domain.
+
+The executable owns composition. HTTP accepts domain ports and its own transport
+settings; it cannot import auth, runtime or SQL implementations. Domain imports
+only Kernel; wire contracts never flow inward. Identity rows reference one
+tenant/user owner. Roles exist only in normalized user_role rows, with one
+independent membership version on user. Never copy roles onto provider identities.
+Enforce these boundaries with negative project/source graph tests.
 
 ## HTTP and authentication
 
@@ -35,8 +44,10 @@ where logging is required.
 
 ## Verification
 
-Run build, lint and tests in that order. Exercise managed .NET and actual
-NativeAOT locally and in Docker, including storage, HTTP, SDK and migration
-acceptance. Tests use isolated disposable databases; do not reset production
+Run build, lint and tests in that order. Exercise managed compilation for internal
+verification and actual NativeAOT application execution locally and in Docker,
+including storage, HTTP, SDK and migration acceptance. Application serving and
+container images are NativeAOT only; do not add a managed serving selector.
+Tests use isolated disposable databases; do not reset production
 or weaken assertions to make a gate pass. Review the complete change, generated
 artifacts, contracts and configuration before preparing a PR.

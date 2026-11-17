@@ -24,33 +24,36 @@ public static class Identities
             };
             db.Identity.Add(row);
             await Storage.Save(db, ct);
-            return Map(row);
+            return Map(row, []);
         }),
-        (id, ct) => Storage.Guard(async () => Optional(await db.Identity.AsNoTracking()
-            .FirstOrDefaultAsync(row => row.Id == id, ct))),
-        (tenant, provider, user, ct) => Storage.Guard(async () => Optional(await db.Identity.AsNoTracking()
-            .FirstOrDefaultAsync(row => row.TenantId == tenant && row.Provider == provider && row.ProviderUserId == user, ct))),
-        (tenant, email, ct) => Storage.Guard(async () => Optional(await db.Identity.AsNoTracking()
-            .FirstOrDefaultAsync(row => row.TenantId == tenant && row.Email == email, ct))),
-        (tenant, user, ct) => Storage.Guard(async () => Optional(await db.Identity.AsNoTracking()
-            .FirstOrDefaultAsync(row => row.TenantId == tenant && row.UserId == user, ct))),
-        (id, user, roles, ct) => Storage.Guard(async () =>
+        (id, ct) => Storage.Guard(async () => await Optional(db, await db.Identity.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.Id == id, ct),ct)),
+        (tenant, provider, user, ct) => Storage.Guard(async () => await Optional(db, await db.Identity.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.TenantId == tenant && row.Provider == provider && row.ProviderUserId == user, ct),ct)),
+        (tenant, email, ct) => Storage.Guard(async () => await Optional(db, await db.Identity.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.TenantId == tenant && row.Email == email, ct),ct)),
+        (tenant, user, ct) => Storage.Guard(async () => await Optional(db, await db.Identity.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.TenantId == tenant && row.UserId == user, ct),ct)),
+        (tenant, id, user, roles, ct) => Storage.Transaction(db, async () =>
         {
-            var csv = string.Join(',', roles);
-            var now = clock.IsoNow();
-            await db.Identity.Where(row => row.Id == id).ExecuteUpdateAsync(setters => setters
-                .SetProperty(row => row.UserId, user).SetProperty(row => row.Roles, csv)
-                .SetProperty(row => row.UpdatedAt, now), ct);
-            return Optional(await db.Identity.AsNoTracking().FirstOrDefaultAsync(row => row.Id == id, ct));
-        }),
-        (tenant, user, roles, ct) => Storage.Guard(async () =>
-        {
-            var csv = string.Join(',', roles);
-            var now = clock.IsoNow();
-            return await db.Identity.Where(row => row.TenantId == tenant && row.UserId == user)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Roles, csv)
-                    .SetProperty(row => row.UpdatedAt, now), ct);
-        }));
+            if (!RoleMembership.ValidUser(user) || !RoleMembership.ValidRoles(roles))
+                return Result<Identity?>.Failed("INVALID_REQUEST", "Invalid linked user or roles");
+            var row = await db.Identity.SingleOrDefaultAsync(row => row.Id == id && row.TenantId == tenant, ct);
+            if (row is null) return Result<Identity?>.Success(null);
+            if (row.UserId is not null)
+                return row.UserId == user ? Result<Identity?>.Success(Map(row,await Roles.ForUser(db,tenant,user,ct)))
+                    : Result<Identity?>.Failed("IDENTITY_CONFLICT", "Identity is already linked to another user");
+            var membership = await db.User.AsNoTracking().SingleOrDefaultAsync(value=>value.TenantId==tenant&&value.Id==user,ct);
+            if(membership is null) {
+                var now=clock.IsoNow();
+                db.User.Add(new UserRow{TenantId=tenant,Id=user,RoleVersion=Roles.Version(),CreatedAt=now,UpdatedAt=now});
+                db.UserRole.AddRange(roles.Select(role=>new UserRoleRow{TenantId=tenant,UserId=user,Role=role}));
+            }
+            row.UserId = user;
+            row.UpdatedAt = clock.IsoNow();
+            await Storage.Save(db, ct);
+            return Result<Identity?>.Success(Map(row,await Roles.ForUser(db,tenant,user,ct)));
+        }, ct));
 
     public static string NewId()
     {
@@ -58,17 +61,16 @@ public static class Identities
         return new string(RandomNumberGenerator.GetBytes(16).Select(value => alphabet[value % 62]).ToArray());
     }
 
-    public static Identity Map(IdentityRow row) => new(row.Id, row.TenantId, row.Provider,
+    private static Identity Map(IdentityRow row, IReadOnlyList<string> roles) => new(row.Id, row.TenantId, row.Provider,
         row.ProviderUserId, row.Email, row.Name, row.ProfileImageUrl, row.UserId,
-        row.Roles?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [], Metadata(row.Metadata),
+        roles, Metadata(row.Metadata),
         DateTimeOffset.Parse(row.CreatedAt, System.Globalization.CultureInfo.InvariantCulture),
         DateTimeOffset.Parse(row.UpdatedAt, System.Globalization.CultureInfo.InvariantCulture));
 
-    private static Identity? Optional(IdentityRow? row) => row is null ? null : Map(row);
+    private static async Task<Identity?> Optional(PersonaDbContext db,IdentityRow? row,CancellationToken ct) => row is null ? null : Map(row,await Roles.ForUser(db,row.TenantId,row.UserId,ct));
     private static JsonElement? Metadata(string? text)
     {
         if (string.IsNullOrEmpty(text)) return null;
-        try { using var document = JsonDocument.Parse(text); return document.RootElement.Clone(); }
-        catch (JsonException) { return null; }
+        using var document = JsonDocument.Parse(text); return document.RootElement.Clone();
     }
 }

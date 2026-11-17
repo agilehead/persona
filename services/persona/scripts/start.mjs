@@ -2,7 +2,9 @@ import { spawn } from "node:child_process";
 import { config } from "dotenv";
 import { command, repository } from "./runtime-targets.mjs";
 config({ path: new URL("../../../.env", import.meta.url) });
-const invocation = command(process.argv[2] ?? "csharp");
+if (process.argv.length !== 2)
+  throw new Error("Persona serving accepts no runtime selector");
+const invocation = command("nativeaot");
 const child = spawn(invocation[0], invocation.slice(1), {
   cwd: repository,
   env: process.env,

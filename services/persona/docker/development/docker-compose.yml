@@ -15,6 +15,9 @@ services:
   # Database migrations - runs once and exits
   persona-migrations:
     image: ${PERSONA_MIGRATIONS_IMAGE:-persona-migrations:latest}
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PERSONA_DATA_DIR=/app/data/persona/db

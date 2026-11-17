@@ -1,6 +1,18 @@
-// Database type contract checked against the existing Knex migrations.
+// Database type contract checked against the canonical Knex schema.
 
 export type DatabaseSchema = {
+  user: {
+    tenant_id: string;
+    id: string;
+    role_version: string;
+    created_at: string;
+    updated_at: string;
+  };
+  user_role: {
+    tenant_id: string;
+    user_id: string;
+    role: string;
+  };
   // OAuth identity records
   identity: {
     id: string;
@@ -11,7 +23,6 @@ export type DatabaseSchema = {
     name: string | null;
     profile_image_url: string | null;
     user_id: string | null; // Set by consuming app after onboarding (nullable)
-    roles: string | null; // CSV: "USER,ADMIN" (nullable)
     metadata: string | null; // Raw OAuth claims JSON
     created_at: string;
     updated_at: string;

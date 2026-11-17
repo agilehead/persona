@@ -4,6 +4,8 @@ export type {
   PersonaConfig,
   LinkIdentityResponse,
   UpdateRolesResponse,
+  UserRolesResponse,
+  RoleLookupsResponse,
   RevokeSessionsResponse,
 } from "./types.js";
 export { success, failure } from "./types.js";

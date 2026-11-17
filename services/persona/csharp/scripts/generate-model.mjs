@@ -1,3 +1,7 @@
+import {
+  queries,
+  queryRows,
+} from "../../node/packages/persona-test-utils/dist/index.js";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -112,19 +116,21 @@ try {
       physical.map((column) => column.name).sort(),
       `Column drift: ${table}`,
     );
-    for (const foreign of database.db.pragma(
-      `foreign_key_list(${JSON.stringify(table)})`,
-    )) {
+    const foreignGroups = Map.groupBy(
+      database.db.pragma(`foreign_key_list(${JSON.stringify(table)})`),
+      (foreign) => foreign.id,
+    );
+    for (const fields of foreignGroups.values()) {
+      fields.sort((a, b) => a.seq - b.seq);
+      const foreign = fields[0];
       assert(
-        foreign.seq === 0,
-        "Composite foreign keys require explicit model support",
+        ["CASCADE", "RESTRICT"].includes(foreign.on_delete),
+        "Explicit foreign-key deletion policy",
       );
-      assert(
-        foreign.on_delete === "CASCADE",
-        "Expected the current cascade contract",
-      );
+      const key = (name) =>
+        `new { ${fields.map((field) => `row.${pascal(field[name])}`).join(", ")} }`;
       configure.push(
-        `            entity.HasOne<${pascal(foreign.table)}Row>().WithMany().HasForeignKey(row => row.${pascal(foreign.from)}).OnDelete(DeleteBehavior.Cascade);`,
+        `            entity.HasOne<${pascal(foreign.table)}Row>().WithMany().HasForeignKey(row => ${key("from")}).HasPrincipalKey(row => ${key("to")}).OnDelete(DeleteBehavior.${foreign.on_delete === "CASCADE" ? "Cascade" : "Restrict"});`,
       );
     }
     emit(
@@ -138,12 +144,14 @@ try {
       `        modelBuilder.Entity<${entity}>(entity =>\n        {\n${configure.join("\n")}\n        });`,
     );
   }
-  const physicalTables = database.db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'knex_%'",
-    )
-    .all()
-    .map((row) => row.name);
+  const physicalTables = queryRows(
+    database.db,
+    queries("sqlite_master")
+      .select("name")
+      .where("type", "table")
+      .whereNot("name", "like", "sqlite_%")
+      .whereNot("name", "like", "knex_%"),
+  ).map((row) => row.name);
   assert.deepEqual(
     tables.sort(),
     physicalTables.sort(),

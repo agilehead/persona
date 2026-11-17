@@ -10,7 +10,37 @@ import Database from "better-sqlite3";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync, rmSync } from "fs";
-import Knex from "knex";
+import Knex, { type Knex as KnexTypes } from "knex";
+import { randomBytes } from "node:crypto";
+const queries = Knex({ client: "better-sqlite3", useNullAsDefault: true });
+function prepared(
+  database: Database.Database,
+  query: KnexTypes.QueryBuilder,
+): {
+  statement: Database.Statement;
+  bindings: readonly unknown[];
+} {
+  const compiled = query.toSQL();
+  return {
+    statement: database.prepare(compiled.sql),
+    bindings: compiled.bindings,
+  };
+}
+export function queryRows(
+  database: Database.Database,
+  query: KnexTypes.QueryBuilder,
+): unknown[] {
+  const { statement, bindings } = prepared(database, query);
+  return statement.all(...bindings);
+}
+export function writeQuery(
+  database: Database.Database,
+  query: KnexTypes.QueryBuilder,
+): void {
+  const { statement, bindings } = prepared(database, query);
+  statement.run(...bindings);
+}
+export { queries };
 import { createLogger, type Logger } from "@agilehead/persona-logger";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -101,17 +131,10 @@ export async function setupTestDatabase(testDb: TestDatabase): Promise<void> {
 }
 
 export function truncateAllTables(testDb: TestDatabase): void {
-  testDb.db.pragma("foreign_keys = OFF");
-  const tables = testDb.db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'knex_migrations' AND name != 'knex_migrations_lock'",
-    )
-    .all() as { name: string }[];
-
-  for (const { name } of tables) {
-    testDb.db.prepare(`DELETE FROM ${name}`).run();
-  }
-  testDb.db.pragma("foreign_keys = ON");
+  testDb.db.transaction(() => {
+    for (const name of ["session", "identity", "user_role", "user"])
+      writeQuery(testDb.db, queries(name).delete());
+  })();
 
   testDb.logger.debug("Truncated all test tables");
 }
@@ -169,44 +192,68 @@ export type InsertIdentityData = {
   name?: string | null;
   profileImageUrl?: string | null;
   userId?: string | null;
-  roles?: string | null;
+  roles?: string[];
   metadata?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
-
 export function insertIdentity(
   testDb: TestDatabase,
   data: InsertIdentityData,
 ): void {
   const now = new Date().toISOString();
-
-  testDb.db
-    .prepare(
-      `INSERT INTO identity (
-        id, tenant_id, provider, provider_user_id, email, name, profile_image_url,
-        user_id, roles, metadata, created_at, updated_at
-      ) VALUES (
-        @id, @tenantId, @provider, @providerUserId, @email, @name, @profileImageUrl,
-        @userId, @roles, @metadata, @createdAt, @updatedAt
-      )`,
-    )
-    .run({
-      id: data.id,
-      tenantId: data.tenantId,
-      provider: data.provider,
-      providerUserId: data.providerUserId,
-      email: data.email,
-      name: data.name ?? null,
-      profileImageUrl: data.profileImageUrl ?? null,
-      userId: data.userId ?? null,
-      roles: data.roles ?? null,
-      metadata: data.metadata ?? null,
-      createdAt: data.createdAt ?? now,
-      updatedAt: data.updatedAt ?? now,
-    });
+  testDb.db.transaction(() => {
+    if (
+      data.userId !== undefined &&
+      data.userId !== null &&
+      data.userId !== ""
+    ) {
+      const existing = queryRows(
+        testDb.db,
+        queries("user")
+          .where({ tenant_id: data.tenantId, id: data.userId })
+          .select("id"),
+      );
+      if (existing.length === 0) {
+        writeQuery(
+          testDb.db,
+          queries("user").insert({
+            tenant_id: data.tenantId,
+            id: data.userId,
+            role_version: randomBytes(32).toString("hex"),
+            created_at: now,
+            updated_at: now,
+          }),
+        );
+        for (const role of data.roles ?? [])
+          writeQuery(
+            testDb.db,
+            queries("user_role").insert({
+              tenant_id: data.tenantId,
+              user_id: data.userId,
+              role,
+            }),
+          );
+      }
+    }
+    writeQuery(
+      testDb.db,
+      queries("identity").insert({
+        id: data.id,
+        tenant_id: data.tenantId,
+        provider: data.provider,
+        provider_user_id: data.providerUserId,
+        email: data.email,
+        name: data.name ?? null,
+        profile_image_url: data.profileImageUrl ?? null,
+        user_id: data.userId ?? null,
+        metadata: data.metadata ?? null,
+        created_at: data.createdAt ?? now,
+        updated_at: data.updatedAt ?? now,
+      }),
+    );
+  })();
 }
-
 export type IdentityRecord = {
   id: string;
   tenant_id: string;
@@ -216,50 +263,46 @@ export type IdentityRecord = {
   name: string | null;
   profile_image_url: string | null;
   user_id: string | null;
-  roles: string | null;
   metadata: string | null;
   created_at: string;
   updated_at: string;
 };
-
 export function getIdentity(
   testDb: TestDatabase,
   id: string,
 ): IdentityRecord | null {
-  const result = testDb.db
-    .prepare("SELECT * FROM identity WHERE id = ?")
-    .get(id) as IdentityRecord | undefined;
-
-  return result ?? null;
+  return (
+    (queryRows(testDb.db, queries("identity").where({ id }).select())[0] as
+      IdentityRecord | undefined) ?? null
+  );
 }
-
 export function getIdentityByProvider(
   testDb: TestDatabase,
   tenantId: string,
   provider: string,
   providerUserId: string,
 ): IdentityRecord | null {
-  const result = testDb.db
-    .prepare(
-      "SELECT * FROM identity WHERE tenant_id = ? AND provider = ? AND provider_user_id = ?",
-    )
-    .get(tenantId, provider, providerUserId) as IdentityRecord | undefined;
-
-  return result ?? null;
+  return (
+    (queryRows(
+      testDb.db,
+      queries("identity")
+        .where({
+          tenant_id: tenantId,
+          provider,
+          provider_user_id: providerUserId,
+        })
+        .select(),
+    )[0] as IdentityRecord | undefined) ?? null
+  );
 }
-
+function count(testDb: TestDatabase, query: KnexTypes.QueryBuilder): number {
+  return (
+    queryRows(testDb.db, query.count({ count: "*" }))[0] as { count: number }
+  ).count;
+}
 export function getIdentityCount(testDb: TestDatabase): number {
-  const result = testDb.db
-    .prepare("SELECT COUNT(*) as count FROM identity")
-    .get() as { count: number };
-
-  return result.count;
+  return count(testDb, queries("identity"));
 }
-
-// ==========================================
-// Session Helpers
-// ==========================================
-
 export type InsertSessionData = {
   id: string;
   identityId: string;
@@ -271,34 +314,25 @@ export type InsertSessionData = {
   userAgent?: string | null;
   createdAt?: string;
 };
-
 export function insertSession(
   testDb: TestDatabase,
   data: InsertSessionData,
 ): void {
-  const now = new Date().toISOString();
-
-  testDb.db
-    .prepare(
-      `INSERT INTO session (
-        id, identity_id, tenant_id, token_hash, expires_at, revoked, ip_address, user_agent, created_at
-      ) VALUES (
-        @id, @identityId, @tenantId, @tokenHash, @expiresAt, @revoked, @ipAddress, @userAgent, @createdAt
-      )`,
-    )
-    .run({
+  writeQuery(
+    testDb.db,
+    queries("session").insert({
       id: data.id,
-      identityId: data.identityId,
-      tenantId: data.tenantId,
-      tokenHash: data.tokenHash,
-      expiresAt: data.expiresAt,
+      identity_id: data.identityId,
+      tenant_id: data.tenantId,
+      token_hash: data.tokenHash,
+      expires_at: data.expiresAt,
       revoked: data.revoked ?? 0,
-      ipAddress: data.ipAddress ?? null,
-      userAgent: data.userAgent ?? null,
-      createdAt: data.createdAt ?? now,
-    });
+      ip_address: data.ipAddress ?? null,
+      user_agent: data.userAgent ?? null,
+      created_at: data.createdAt ?? new Date().toISOString(),
+    }),
+  );
 }
-
 export type SessionRecord = {
   id: string;
   identity_id: string;
@@ -310,46 +344,35 @@ export type SessionRecord = {
   user_agent: string | null;
   created_at: string;
 };
-
 export function getSession(
   testDb: TestDatabase,
   id: string,
 ): SessionRecord | null {
-  const result = testDb.db
-    .prepare("SELECT * FROM session WHERE id = ?")
-    .get(id) as SessionRecord | undefined;
-
-  return result ?? null;
+  return (
+    (queryRows(testDb.db, queries("session").where({ id }).select())[0] as
+      SessionRecord | undefined) ?? null
+  );
 }
-
 export function getSessionByTokenHash(
   testDb: TestDatabase,
-  tokenHash: string,
+  hash: string,
 ): SessionRecord | null {
-  const result = testDb.db
-    .prepare("SELECT * FROM session WHERE token_hash = ?")
-    .get(tokenHash) as SessionRecord | undefined;
-
-  return result ?? null;
+  return (
+    (queryRows(
+      testDb.db,
+      queries("session").where({ token_hash: hash }).select(),
+    )[0] as SessionRecord | undefined) ?? null
+  );
 }
-
 export function getSessionCount(testDb: TestDatabase): number {
-  const result = testDb.db
-    .prepare("SELECT COUNT(*) as count FROM session")
-    .get() as { count: number };
-
-  return result.count;
+  return count(testDb, queries("session"));
 }
-
 export function getActiveSessionCountByIdentityId(
   testDb: TestDatabase,
-  identityId: string,
+  id: string,
 ): number {
-  const result = testDb.db
-    .prepare(
-      "SELECT COUNT(*) as count FROM session WHERE identity_id = ? AND revoked = 0",
-    )
-    .get(identityId) as { count: number };
-
-  return result.count;
+  return count(
+    testDb,
+    queries("session").where({ identity_id: id, revoked: 0 }),
+  );
 }

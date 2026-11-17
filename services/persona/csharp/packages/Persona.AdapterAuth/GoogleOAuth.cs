@@ -15,19 +15,15 @@ namespace Persona.AdapterAuth;
 
 public sealed record GoogleOptions(string ClientId, string ClientSecret, string RedirectUri,
     string Issuer = "https://accounts.google.com");
-public sealed record GoogleProvider(
-    Func<string, string, string, CancellationToken, Task<string>> Authorize,
-    Func<Uri, string, string, string?, CancellationToken, Task<Result<OAuthUser>>> Exchange);
-
 public static class GoogleOAuth
 {
-    public static GoogleProvider Create(GoogleOptions config, HttpClient http)
+    public static OAuthProvider Create(GoogleOptions config, HttpClient http)
     {
         ConfigurationManager<OpenIdConnectConfiguration> Metadata() => new(
             config.Issuer.TrimEnd('/') + "/.well-known/openid-configuration",
             new OpenIdConnectConfigurationRetriever(), new HttpDocumentRetriever(http));
         var metadata = Metadata();
-        return new GoogleProvider(
+        return new OAuthProvider(
             async (state, nonce, verifier, ct) =>
             {
                 var discovery = await metadata.GetConfigurationAsync(ct);
@@ -37,7 +33,7 @@ public static class GoogleOAuth
                 {
                     ["client_id"] = config.ClientId, ["redirect_uri"] = config.RedirectUri,
                     ["response_type"] = "code", ["scope"] = "openid email profile", ["state"] = state,
-                    ["nonce"] = nonce, ["code_challenge"] = Tokens.Encode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier))),
+                    ["nonce"] = nonce, ["code_challenge"] = Base64Url.Encode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier))),
                     ["code_challenge_method"] = "S256"
                 });
             },
@@ -76,7 +72,7 @@ public static class GoogleOAuth
                     }
                     if (!validation.IsValid || validation.SecurityToken is not JsonWebToken token)
                         return Rejected("Invalid Google ID token");
-                    using var claimsDocument = JsonDocument.Parse(Tokens.Decode(token.EncodedPayload));
+                    using var claimsDocument = JsonDocument.Parse(Base64Url.Decode(token.EncodedPayload));
                     var claims = claimsDocument.RootElement;
                     new OpenIdConnectProtocolValidator
                     {

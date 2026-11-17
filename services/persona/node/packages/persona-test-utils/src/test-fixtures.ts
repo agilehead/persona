@@ -38,7 +38,7 @@ export function createTestIdentity(overrides?: {
   name?: string | null;
   profileImageUrl?: string | null;
   userId?: string | null;
-  roles?: string | null;
+  roles?: string[];
   metadata?: string | null;
 }): {
   id: string;
@@ -49,7 +49,7 @@ export function createTestIdentity(overrides?: {
   name: string | null;
   profileImageUrl: string | null;
   userId: string | null;
-  roles: string | null;
+  roles: string[];
   metadata: string | null;
 } {
   const id = overrides?.id ?? generateId(10);
@@ -64,7 +64,7 @@ export function createTestIdentity(overrides?: {
     name: overrides?.name ?? `Test User ${id}`,
     profileImageUrl: overrides?.profileImageUrl ?? null,
     userId: overrides?.userId ?? null,
-    roles: overrides?.roles ?? null,
+    roles: overrides?.roles ?? [],
     metadata: overrides?.metadata ?? null,
   };
 }

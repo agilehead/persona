@@ -20,7 +20,10 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}Building Persona Docker images...${NC}"
 
 # Get git commit hash for labeling
-GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_COMMIT=$(git rev-parse HEAD)
+GIT_TAG=$(git rev-parse --short HEAD)
+SOURCE_DIRTY=false
+if [ -n "$(git status --porcelain)" ]; then SOURCE_DIRTY=true; fi
 BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 build_image() {
@@ -29,17 +32,19 @@ build_image() {
   local dockerfile="$3"
 
   echo -e "${YELLOW}Building image: ${image_name}:${TAG} (target: ${target})${NC}"
-  docker build \
+  docker buildx build --load \
     -f "${dockerfile}" \
     --target "${target}" \
     --build-arg GIT_COMMIT="${GIT_COMMIT}" \
     --build-arg BUILD_DATE="${BUILD_DATE}" \
     --label "git.commit=${GIT_COMMIT}" \
+    --label "org.opencontainers.image.revision=${GIT_COMMIT}" \
+    --label "source.dirty=${SOURCE_DIRTY}" \
     --label "build.date=${BUILD_DATE}" \
     -t "${image_name}:${TAG}" \
-    -t "${image_name}:${GIT_COMMIT}" \
     .
 
+  if [ "$SOURCE_DIRTY" = false ]; then docker tag "${image_name}:${TAG}" "${image_name}:${GIT_TAG}"; fi
   if [ $? -eq 0 ]; then
     echo -e "${GREEN}Successfully built ${image_name}:${TAG}${NC}"
   else
@@ -52,9 +57,7 @@ build_image() {
 build_image "migrations" "persona-migrations" "services/persona/database/Dockerfile"
 
 # Build production image
-APP_TARGET="${PERSONA_DOTNET_CONTAINER_TARGET:-nativeaot}"
-case "$APP_TARGET" in nativeaot|managed) ;; *) echo "Choose nativeaot or managed" >&2; exit 2 ;; esac
-build_image "$APP_TARGET" "persona" "services/persona/csharp/Dockerfile"
+build_image "nativeaot" "persona" "services/persona/csharp/Dockerfile"
 
 # Show image info
 echo -e "\n${YELLOW}Image details:${NC}"

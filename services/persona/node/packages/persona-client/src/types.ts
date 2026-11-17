@@ -23,7 +23,7 @@ export type PersonaConfig = {
   internalSecret: string;
   /** Tenant ID for multi-tenant mode (appended as ?tenant=xxx) */
   tenantId?: string;
-  /** Request timeout in milliseconds */
+  /** Complete response timeout in milliseconds; defaults to30 seconds. */
   timeout?: number;
   /** Optional logger for debugging */
   logger?: Logger;
@@ -42,9 +42,17 @@ export type LinkIdentityResponse = {
   };
 };
 
+export type UserRolesResponse = {
+  userId: string;
+  exists: boolean;
+  roles: string[];
+  etag: string | null;
+};
+export type RoleLookupsResponse = { users: UserRolesResponse[] };
+
 export type UpdateRolesResponse = {
   success: boolean;
-  updatedCount: number;
+  user: UserRolesResponse;
 };
 
 export type RevokeSessionsResponse = {

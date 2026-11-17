@@ -9,6 +9,7 @@ export type InternalRequestOptions = {
   tenantId?: string;
   body?: unknown;
   timeout?: number;
+  ifMatch?: string;
   logger?: Logger;
 };
 
@@ -23,33 +24,26 @@ export async function internalRequest<T>(
     tenantId !== undefined ? `?tenant=${encodeURIComponent(tenantId)}` : "";
   const url = `${base}${path}${tenantParam}`;
 
+  const controller = new AbortController();
+  const timeoutId =
+    timeout === undefined
+      ? undefined
+      : setTimeout(() => controller.abort(), timeout);
   try {
     logger?.debug("Persona internal request:", { method, url });
-
-    const controller = new AbortController();
-    const timeoutId =
-      timeout !== undefined
-        ? setTimeout(() => {
-            controller.abort();
-          }, timeout)
-        : undefined;
-
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${secret}`,
-        },
-        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        signal: controller.signal,
-      });
-    } finally {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
+    const response = await fetch(url, {
+      method,
+      redirect: "error",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${secret}`,
+        ...(options.ifMatch === undefined
+          ? {}
+          : { "If-Match": options.ifMatch }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: controller.signal,
+    });
 
     logger?.debug("Persona internal response:", {
       status: response.status,
@@ -78,5 +72,7 @@ export async function internalRequest<T>(
     const message = err instanceof Error ? err.message : String(err);
     logger?.error("Persona request error:", { url, error: message });
     return failure(new Error(`Network error: ${message}`));
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }

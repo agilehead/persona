@@ -47,6 +47,19 @@ public static class Storage
         finally { database.ChangeTracker.Clear(); }
     }
 
+    public static async Task<T> ReadSnapshot<T>(PersonaDbContext database, Func<Task<T>> read, CancellationToken ct)
+    {
+        if (database.Database.CurrentTransaction is not null) return await read();
+        await database.Database.OpenConnectionAsync(ct);
+        try
+        {
+            await using var transaction = ((SqliteConnection)database.Database.GetDbConnection()).BeginTransaction(deferred: true);
+            await using var enlisted = await database.Database.UseTransactionAsync(transaction, ct);
+            return await read();
+        }
+        finally { await database.Database.CloseConnectionAsync(); }
+    }
+
     public static async Task<Result<T>> Guard<T>(Func<Task<T>> operation)
     {
         try { return Result<T>.Success(await operation()); }
@@ -65,7 +78,7 @@ public static class Storage
             await using var transaction = await database.Database.BeginTransactionAsync(cancellation);
             var result = await operation();
             if (result.IsSuccess) await transaction.CommitAsync(cancellation);
-            else await transaction.RollbackAsync(cancellation);
+            else await transaction.RollbackAsync();
             return result;
         }
         catch (Exception exception) when (exception is DbUpdateException or SqliteException)

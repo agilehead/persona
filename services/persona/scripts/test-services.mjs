@@ -1,3 +1,10 @@
+import {
+  queries,
+  queryRows,
+} from "../node/packages/persona-test-utils/dist/index.js";
+import { verifyTestResources } from "../../../scripts/test-resources.mjs";
+verifyTestResources();
+process.env.DOTNET_PROCESSOR_COUNT = "2";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import { spawn } from "node:child_process";
@@ -36,6 +43,8 @@ async function freePort() {
 await run([
   process.execPath,
   "--test",
+  "services/persona/tests/contracts/architecture.test.mjs",
+  "services/persona/tests/contracts/schema.test.mjs",
   "services/persona/tests/contracts/migration-paths.test.mjs",
   "services/persona/tests/contracts/image-publication.test.mjs",
 ]);
@@ -46,11 +55,13 @@ for (const target of targets) {
   for (const mode of modes) {
     const database = createTestDatabase();
     await setupTestDatabase(database);
-    const schema = database.db
-      .prepare(
-        "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name",
-      )
-      .all();
+    const schema = queryRows(
+      database.db,
+      queries("sqlite_master")
+        .select("name", "sql")
+        .whereNotNull("sql")
+        .orderBy("name"),
+    );
     if (database.knex !== null) {
       await database.knex.destroy();
       database.knex = null;
@@ -92,11 +103,13 @@ for (const target of targets) {
         await run([...command(target, "ContractProbe"), database.dbPath]);
       }
       assert.deepEqual(
-        database.db
-          .prepare(
-            "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name",
-          )
-          .all(),
+        queryRows(
+          database.db,
+          queries("sqlite_master")
+            .select("name", "sql")
+            .whereNotNull("sql")
+            .orderBy("name"),
+        ),
         schema,
         "Server operations must not change the Knex schema",
       );

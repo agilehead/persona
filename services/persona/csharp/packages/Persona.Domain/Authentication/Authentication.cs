@@ -22,6 +22,28 @@ public sealed record TokenService(
 
 public static class Authentication
 {
+    public static async Task<Result<TokenPair>> Refresh(IdentityStore identities, TokenService tokens,
+        string refresh, CancellationToken ct)
+    {
+        var validated = await tokens.ValidateRefresh(refresh, ct);
+        if (!validated.IsSuccess) return Result<TokenPair>.Failed(validated.Error!);
+        var found = await identities.FindById(validated.Value.IdentityId, ct);
+        if (!found.IsSuccess) return Result<TokenPair>.Failed(found.Error!);
+        if (found.Value is null) return Result<TokenPair>.Failed("INVALID_TOKEN", "Identity not found");
+        var slid = await tokens.Slide(validated.Value.Id, ct);
+        if (!slid.IsSuccess) return Result<TokenPair>.Failed(slid.Error!);
+        return Result<TokenPair>.Success(new(tokens.AccessToken(found.Value, validated.Value.Id), refresh, tokens.AccessLifetime));
+    }
+
+    public static async Task<Result<Unit>> Logout(TokenService tokens, string? refresh, CancellationToken ct)
+    {
+        if (refresh is null) return Result<Unit>.Success(new());
+        var validated = await tokens.ValidateRefresh(refresh, ct);
+        if (!validated.IsSuccess)
+            return validated.Error!.Code == "INVALID_TOKEN" ? Result<Unit>.Success(new()) : Result<Unit>.Failed(validated.Error);
+        return await tokens.Revoke(validated.Value.Id, ct);
+    }
+
     public static async Task<Result<Login>> Login(IdentityStore identities, TokenService tokens,
         string tenant, string provider, OAuthUser user, string? ip, string? agent, CancellationToken ct)
     {
@@ -42,9 +64,9 @@ public static class Authentication
     }
 
     public static async Task<Result<Login>> Link(IdentityStore identities, TokenService tokens,
-        string id, string user, IReadOnlyList<string> roles, CancellationToken ct)
+        string tenant, string id, string user, IReadOnlyList<string> roles, CancellationToken ct)
     {
-        var linked = await identities.Link(id, user, roles, ct);
+        var linked = await identities.Link(tenant, id, user, roles, ct);
         if (!linked.IsSuccess) return Result<Login>.Failed(linked.Error!);
         if (linked.Value is null) return Result<Login>.Failed("NOT_FOUND", "Identity not found");
         var generated = await tokens.Generate(linked.Value, null, null, ct);

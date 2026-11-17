@@ -25,7 +25,7 @@ services/persona/
   tests/contracts/
 ```
 
-The executable delegates startup to the HTTP host. Domain feature modules own immutable records, function-delegate persistence ports, expected failures through `Result<T>`, and cancellation. Adapters implement the ports; EF persistence rows are distinct from domain records. HTTP owns ASP.NET context, identity/tenant extraction and wire validation. The authentication adapter owns token and provider verification. Runtime settings and composition remain outside the domain. Contracts own generated JSON metadata and wire shapes. Multi-store transactions use the shared `IUnitOfWork.Run` contract; no transaction spans an outbound provider call.
+The executable is the composition root: it selects runtime configuration, persistence, authentication and provider implementations, then supplies domain ports to the HTTP host. Domain feature modules own immutable records, function-delegate persistence ports, expected failures through `Result<T>`, and cancellation. Adapters implement the ports; EF persistence rows are distinct from domain records. HTTP owns ASP.NET context, identity/tenant extraction and wire validation. The authentication adapter owns token and provider verification. Runtime settings and composition remain outside the domain. Contracts own generated JSON metadata and wire shapes. Local persistence transactions use the shared `IUnitOfWork.Run` contract; no transaction spans an outbound provider call. Domain owns refresh/logout sequencing; HTTP maps their results to responses and configured cookies.
 
 ## Storage
 
@@ -41,19 +41,19 @@ Knex in `services/persona/database/persona/sqlite/migrations/` remains the sole 
 
 `npm run generate:model` creates a disposable Knex database, checks the database `DatabaseSchema` contract against every table, column, nullability and key, and generates persistence rows and the EF mapping under `AdapterSqlite/generated/`. `npm run build` runs that generator with `--check`; drift fails the build. These generated files are source artifacts. The design-time EF compiled model and interceptors are rebuildable `obj/` output and are not tracked.
 
-SQLite strings preserve the Node representations: ISO UTC timestamps with milliseconds, nullable fields and stored JSON and CSV roles, base62 identifiers and SHA-256 refresh-token hashes. Failed writes detach persistence state so a subsequent operation is not contaminated. Transaction failures roll back.
+SQLite uses canonical representations: ISO UTC timestamps with milliseconds, nullable fields and stored JSON, base62 identifiers and SHA-256 refresh-token hashes. Failed writes detach persistence state so a subsequent operation is not contaminated. Transaction failures roll back. Roles are normalized in user_role beneath a tenant/user owner; provider identities have no role column. Persona.Server wires concrete implementations; the HTTP adapter accepts domain ports and transport settings only.
 
 The pinned SQLite provider's `IRelationalDatabaseCreator.Create` implementation configures WAL on its existing connection; table creation is a separate API. The adapter supplies `ReadWrite` mode and requires an existing absolute file. Acceptance verifies WAL and unchanged schema after initialization.
 
-- [Pinned SQLite provider implementation](https://github.com/dotnet/efcore/blob/v11.0.0-rc.2.26504.105/src/EFCore.Sqlite.Core/Storage/Internal/SqliteDatabaseCreator.cs#L40)
+- [Pinned SQLite provider implementation](https://github.com/dotnet/efcore/blob/v11.0.0/src/EFCore.Sqlite.Core/Storage/Internal/SqliteDatabaseCreator.cs#L40)
 
 ## Native publication
 
-The repository pins .NET 11 RC2 and EF 11 RC2 identically to Snapped. The build-only EF compiler is the same name-normalized implementation, including converter metadata, collection parameter and captured-value fixes. It and Roslyn/design-time dependencies do not enter the application image.
+The repository pins .NET SDK 11.0.100 and EF Core 11.0.0. The build-only EF compiler is the same name-normalized implementation, including converter metadata, collection parameter and captured-value fixes. It and Roslyn/design-time dependencies do not enter the application image.
 
 `npm run build:native` sequentially publishes the server and contract probe. Native tests require an ELF header and execute that binary; they do not accept a managed substitute. Application compiler/analyzer warnings are errors. Upstream EF/linker/AOT warnings remain visible under the same policy as Snapped; actual execution of all supported queries and provider paths is required in addition to successful publication.
 
-The Dockerfile defaults to the `nativeaot` target and provides a `managed` target. Both use the same pinned base images as Snapped and expose `/app/persona health`; the native image contains neither Node nor the managed .NET runtime. Knex has a separate one-shot Node image built from `services/persona/database/Dockerfile`.
+The Dockerfile provides one `nativeaot` application target exposing `/app/persona health`. It contains neither Node nor the managed .NET runtime. Knex has a separate one-shot Node image built from `services/persona/database/Dockerfile`.
 
 ## Verification
 

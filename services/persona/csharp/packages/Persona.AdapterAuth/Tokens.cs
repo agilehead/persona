@@ -34,7 +34,7 @@ public static partial class Tokens
                 if (!result.IsSuccess) return Result<Session>.Failed(result.Error!);
                 if (result.Value is not { } session) return Result<Session>.Failed("INVALID_TOKEN", "Invalid refresh token");
                 if (session.Revoked) return Result<Session>.Failed("INVALID_TOKEN", "Session has been revoked");
-                if (session.ExpiresAt < clock.UtcNow()) return Result<Session>.Failed("INVALID_TOKEN", "Refresh token expired");
+                if (session.ExpiresAt <= clock.UtcNow()) return Result<Session>.Failed("INVALID_TOKEN", "Refresh token expired");
                 return Result<Session>.Success(session);
             },
             async (id, ct) => Updated(await sessions.ExtendExpiry(id, clock.UtcNow().AddSeconds(refreshLifetime), ct)),
@@ -45,14 +45,6 @@ public static partial class Tokens
     private static Result<Unit> Updated(Result<bool> result) => !result.IsSuccess ? Result<Unit>.Failed(result.Error!)
         : result.Value ? Result<Unit>.Success(new Unit()) : Result<Unit>.Failed("NOT_FOUND", "Session not found");
     public static string Hash(string token) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
-    public static string Encode(ReadOnlySpan<byte> bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-    public static byte[] Decode(string value)
-    {
-        if (value.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_'))
-            throw new FormatException("Invalid base64url");
-        return Convert.FromBase64String(value.Replace('-', '+').Replace('_', '/').PadRight((value.Length + 3) / 4 * 4, '='));
-    }
-
     public static string Sign(Identity identity, string session, string secret, int lifetime, DateTimeOffset now)
     {
         var claims = new JsonObject { ["sub"] = identity.Id, ["tenant"] = identity.TenantId,
@@ -61,8 +53,8 @@ public static partial class Tokens
         if (identity.UserId is not null) claims["userId"] = identity.UserId;
         if (identity.Name is not null) claims["name"] = identity.Name;
         if (identity.ProfileImageUrl is not null) claims["profileImageUrl"] = identity.ProfileImageUrl;
-        var body = Encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}"u8) + "." + Encode(Encoding.UTF8.GetBytes(claims.ToJsonString()));
-        return body + "." + Encode(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.ASCII.GetBytes(body)));
+        var body = Base64Url.Encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}"u8) + "." + Base64Url.Encode(Encoding.UTF8.GetBytes(claims.ToJsonString()));
+        return body + "." + Base64Url.Encode(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.ASCII.GetBytes(body)));
     }
 
     public static Result<JsonElement> Verify(string token, string secret, DateTimeOffset now)
@@ -71,7 +63,7 @@ public static partial class Tokens
         {
             var parts = token.Split('.');
             if (parts.Length != 3) return Invalid("Invalid token");
-            using var header = JsonDocument.Parse(Decode(parts[0]));
+            using var header = JsonDocument.Parse(Base64Url.Decode(parts[0]));
             var algorithm = header.RootElement.GetProperty("alg").GetString();
             var bytes = Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]);
             var key = Encoding.UTF8.GetBytes(secret);
@@ -82,10 +74,11 @@ public static partial class Tokens
                 "HS512" => HMACSHA512.HashData(key, bytes),
                 _ => null
             };
-            if (signature is null || !CryptographicOperations.FixedTimeEquals(signature, Decode(parts[2]))) return Invalid("Invalid token");
-            using var payload = JsonDocument.Parse(Decode(parts[1]));
+            if (signature is null || !CryptographicOperations.FixedTimeEquals(signature, Base64Url.Decode(parts[2]))) return Invalid("Invalid token");
+            using var payload = JsonDocument.Parse(Base64Url.Decode(parts[1]));
             if (payload.RootElement.ValueKind != JsonValueKind.Object) return Invalid("Invalid token");
-            if (payload.RootElement.TryGetProperty("exp", out var exp) && now.ToUnixTimeSeconds() >= exp.GetDouble()) return Invalid("Token expired");
+            if (!payload.RootElement.TryGetProperty("exp", out var exp) || !exp.TryGetInt64(out var expires)) return Invalid("Missing or invalid token expiry");
+            if (now.ToUnixTimeSeconds() >= expires) return Invalid("Token expired");
             if (payload.RootElement.TryGetProperty("nbf", out var nbf) && now.ToUnixTimeSeconds() < nbf.GetDouble()) return Invalid("Invalid token");
             return Result<JsonElement>.Success(payload.RootElement.Clone());
         }
@@ -97,7 +90,7 @@ public static partial class Tokens
     public static int Lifetime(string expiry)
     {
         var match = ExpiryPattern().Match(expiry);
-        if (!match.Success) return 900;
+        if (!match.Success) throw new ArgumentException("Invalid token lifetime", nameof(expiry));
         var value = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
         return checked(value * (match.Groups[2].Value switch { "s" => 1, "m" => 60, "h" => 3600, "d" => 86400, "w" => 604800, _ => 1 }));
     }

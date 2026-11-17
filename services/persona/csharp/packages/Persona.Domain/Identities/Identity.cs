@@ -17,5 +17,4 @@ public sealed record IdentityStore(
     Func<string, string, string, CancellationToken, Task<Result<Identity?>>> FindByProvider,
     Func<string, string, CancellationToken, Task<Result<Identity?>>> FindByEmail,
     Func<string, string, CancellationToken, Task<Result<Identity?>>> FindByUserId,
-    Func<string, string, IReadOnlyList<string>, CancellationToken, Task<Result<Identity?>>> Link,
-    Func<string, string, IReadOnlyList<string>, CancellationToken, Task<Result<int>>> UpdateRoles);
+    Func<string, string, string, IReadOnlyList<string>, CancellationToken, Task<Result<Identity?>>> Link);
