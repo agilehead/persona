@@ -4,6 +4,9 @@
 
 // Test database utilities
 export {
+  queries,
+  queryRows,
+  writeQuery,
   type TestDatabase,
   type TestDatabaseState,
   createTestDatabase,

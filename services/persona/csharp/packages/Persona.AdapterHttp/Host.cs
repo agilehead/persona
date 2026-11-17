@@ -4,39 +4,32 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Persona.AdapterAuth;
-using Persona.AdapterRuntime;
-using Persona.AdapterSqlite;
 using Persona.Kernel;
+using System.Text.Json;
+using System.Text;
+using System.Security.Cryptography;
+using Persona.Domain.Authentication;
 
 namespace Persona.AdapterHttp;
 
 public static class Host
 {
-    public static async Task<int> Run(string[] arguments)
+    public static async Task<int> Run(string[] arguments, HttpSettings settings, OAuthProvider? google,
+        PasswordVerifier? devAuth, Action<WebApplicationBuilder> configure)
     {
-        if (arguments.SequenceEqual(["health"]))
-        {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-            try { return (await client.GetAsync("http://127.0.0.1:" + Settings.Number("PERSONA_SERVER_PORT", 5005) + "/health")).IsSuccessStatusCode ? 0 : 1; }
-            catch (HttpRequestException) { return 1; }
-        }
-        var settings = Settings.Read();
-        var devAuth = DevUsers.Resolve(settings.DevUsers, settings.RuntimeEnvironment);
+        var internalCredential = SHA256.HashData(Encoding.UTF8.GetBytes("Bearer " + settings.InternalSecret));
         var builder = WebApplication.CreateSlimBuilder(arguments);
-        builder.Logging.SetMinimumLevel(Logging.Minimum(Environment.GetEnvironmentVariable("LOG_LEVEL")));
         builder.WebHost.UseUrls($"http://{settings.Host}:{settings.Port}");
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.WithOrigins(settings.CorsOrigins).AllowCredentials().AllowAnyHeader().AllowAnyMethod()));
+        configure(builder);
         var app = builder.Build();
-        Storage.Initialize(settings.DatabasePath);
-        using var googleHttp = new HttpClient();
-        var google = settings.GoogleClientId is not null ? GoogleOAuth.Create(new GoogleOptions(
-            settings.GoogleClientId, settings.GoogleClientSecret!, settings.GoogleRedirectUri!), googleHttp) : null;
-        var clock = new Clock(() => DateTimeOffset.UtcNow);
         if (settings.CorsOrigins.Length > 0) app.UseCors();
         if (devAuth is not null) Console.Error.WriteLine("WARNING: development username/password login is ENABLED; production environments disable it");
         app.Use(async (context, next) =>
         {
+            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers.XContentTypeOptions = "nosniff";
+            context.Response.Headers["Referrer-Policy"] = "no-referrer";
             var path = context.Request.Path.Value?.TrimEnd('/') ?? "";
             if (HttpMethods.IsPost(context.Request.Method) &&
                 (path.Equals("/logout", StringComparison.OrdinalIgnoreCase)
@@ -46,19 +39,26 @@ public static class Host
             { await Http.Error(context, 403, "Browser origin is not allowed"); return; }
             if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } feature) feature.MaxRequestBodySize = 1024 * 1024;
             try { await Http.Body(context); await next(context); }
-            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { context.Abort(); }
+            catch (JsonException) { if(!context.Response.HasStarted)await Http.Error(context,400,"Malformed JSON body");else context.Abort(); }
+            catch (BadHttpRequestException error) { if(!context.Response.HasStarted)await Http.Error(context,error.StatusCode,"Invalid request body");else context.Abort(); }
             catch (Exception error)
             {
                 app.Logger.LogError(error, "Persona request failed");
                 if (!context.Response.HasStarted) await Http.Error(context, 500, "Internal server error");
+                else context.Abort();
             }
         });
+        app.MapGet("/auth/config", context => Http.Json(context, new System.Text.Json.Nodes.JsonObject {
+            ["googleEnabled"] = google is not null, ["devLoginEnabled"] = devAuth is not null,
+            ["tenantRequired"] = settings.TenantMode == "multi"
+        }));
         app.MapGet("/health", context => Http.Json(context, new System.Text.Json.Nodes.JsonObject { ["status"] = "ok" }));
         app.Map("/{**path}", async context =>
         {
             var path = context.Request.Path.Value?.TrimEnd('/') ?? "";
             var internalRequest = path.StartsWith("/internal", StringComparison.OrdinalIgnoreCase);
-            if (internalRequest && context.Request.Headers.Authorization != "Bearer " + settings.InternalSecret)
+            if (internalRequest && !CryptographicOperations.FixedTimeEquals(internalCredential, SHA256.HashData(Encoding.UTF8.GetBytes(context.Request.Headers.Authorization.ToString()))))
             { await Http.Error(context, 401, "Unauthorized"); return; }
             string? tenant = null;
             if (internalRequest || path.StartsWith("/auth", StringComparison.OrdinalIgnoreCase)
@@ -67,10 +67,9 @@ public static class Host
                 tenant = Http.Tenant(context, settings, out var error);
                 if (error is not null) { await Http.Error(context, 400, error); return; }
             }
-            await using var db = Storage.Open(settings.DatabasePath);
-            var identities = AdapterSqlite.Identities.Identities.Create(db, clock);
-            var tokens = Tokens.Create(AdapterSqlite.Sessions.Sessions.Create(db, clock), clock,
-                settings.JwtSecret, settings.AccessExpiry, settings.RefreshExpiry);
+            var ports = context.RequestServices.GetRequiredService<RequestPorts>();
+            var identities = ports.Identities;
+            var tokens = ports.Tokens;
             if (HttpMethods.IsGet(context.Request.Method) && google is not null && path.Equals("/auth/google", StringComparison.OrdinalIgnoreCase))
                 await GoogleRoutes.Start(context, settings, google, tenant!);
             else if (HttpMethods.IsGet(context.Request.Method) && google is not null && path.Equals("/auth/google/callback", StringComparison.OrdinalIgnoreCase))
@@ -86,10 +85,12 @@ public static class Host
                 var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length == 4 && parts[1].Equals("identity", StringComparison.OrdinalIgnoreCase)
                     && parts[3].Equals("link", StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method))
-                    await InternalRoutes.Link(context, identities, tokens, Uri.UnescapeDataString(parts[2]));
+                    await InternalRoutes.Link(context, identities, tokens, tenant!, Uri.UnescapeDataString(parts[2]));
                 else if (parts.Length == 4 && parts[1].Equals("user", StringComparison.OrdinalIgnoreCase)
-                    && parts[3].Equals("roles", StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPut(context.Request.Method))
-                    await InternalRoutes.Roles(context, identities, tenant!, Uri.UnescapeDataString(parts[2]));
+                    && parts[3].Equals("roles", StringComparison.OrdinalIgnoreCase) && (HttpMethods.IsPut(context.Request.Method) || HttpMethods.IsGet(context.Request.Method)))
+                    await InternalRoutes.Roles(context, ports.Roles, tenant!, Uri.UnescapeDataString(parts[2]));
+                else if (parts.SequenceEqual(["internal", "users", "role-lookups"]) && HttpMethods.IsPost(context.Request.Method))
+                    await InternalRoutes.LookupRoles(context, ports.Roles, tenant!);
                 else if (parts.Length == 4 && parts[1].Equals("user", StringComparison.OrdinalIgnoreCase)
                     && parts[3].Equals("sessions", StringComparison.OrdinalIgnoreCase) && HttpMethods.IsDelete(context.Request.Method))
                     await InternalRoutes.Sessions(context, tokens, tenant!, Uri.UnescapeDataString(parts[2]));

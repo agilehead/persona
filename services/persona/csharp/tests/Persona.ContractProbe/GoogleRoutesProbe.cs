@@ -11,12 +11,11 @@ internal static class GoogleRoutesProbe
 {
     public static async Task Run(IdentityStore identities, TokenService tokens, Action<bool, string> check)
     {
-        var settings = new Settings("127.0.0.1", 5005, "https://persona.example.test", "/unused/persona.db",
-            "probe-secret", "internal", "15m", "7d", ".example.test", ".example.test", "multi", ["routes-tenant"],
-            ["https://app.example.test", "https://admin.example.test"], null,
-            "production", "client", "secret", "https://persona.example.test/auth/google/callback");
+        var settings = new HttpSettings("127.0.0.1", 5005, "https://persona.example.test", "internal",
+            ".example.test", ".example.test", "multi", ["routes-tenant"],
+            ["https://app.example.test", "https://admin.example.test"], true);
         using var claims = JsonDocument.Parse("{\"sub\":\"http-google\",\"verified\":true}");
-        var provider = new GoogleProvider((state, nonce, verifier, _) =>
+        var provider = new OAuthProvider((state, nonce, verifier, _) =>
         {
             check(state.Length == 64 && nonce.Length == 64 && verifier.Length == 43, "Google route produces fresh state, nonce and PKCE entropy");
             return Task.FromResult("https://accounts.google.com/authorize?state=" + state);

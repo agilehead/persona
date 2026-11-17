@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { describe, it, beforeEach, afterEach } from "node:test";
 import { expect } from "chai";
 import { createPersonaClient, createNoOpPersonaClient } from "../client.js";
@@ -110,22 +111,72 @@ void describe("PersonaClient", () => {
       });
     });
 
+    void it("reads one authoritative role resource with encoded identity and tenant", async () => {
+      fetchResponse = {
+        status: 200,
+        body: {
+          userId: "user-1",
+          exists: true,
+          roles: ["admin"],
+          etag: '"roles-test"',
+        },
+      };
+      const result = await createPersonaClient({
+        ...config,
+        tenantId: "test-tenant",
+      }).getUserRoles("user-1");
+      expect(result.success).to.equal(true);
+      if (result.success) expect(result.data.roles).to.deep.equal(["admin"]);
+      expect(first(fetchCalls).url).to.equal(
+        "http://localhost:4005/internal/user/user-1/roles?tenant=test-tenant",
+      );
+      expect(first(fetchCalls).init.method).to.equal("GET");
+    });
+    void it("looks up memberships in one bulk request including absent users", async () => {
+      fetchResponse = {
+        status: 200,
+        body: {
+          users: [{ userId: "missing", exists: false, roles: [], etag: null }],
+        },
+      };
+      const result = await createPersonaClient(config).lookupUserRoles([
+        "missing",
+      ]);
+      expect(result.success).to.equal(true);
+      if (result.success) expect(result.data.users[0]?.exists).to.equal(false);
+      expect(first(fetchCalls).url).to.equal(
+        "http://localhost:4005/internal/users/role-lookups",
+      );
+      expect(first(fetchCalls).init.body).to.equal(
+        JSON.stringify({ userIds: ["missing"] }),
+      );
+    });
+
     void describe("updateUserRoles", () => {
       void it("should make correct PUT request", async () => {
         fetchResponse = {
           status: 200,
-          body: { success: true, updatedCount: 1 },
+          body: {
+            success: true,
+            user: {
+              userId: "user-1",
+              exists: true,
+              roles: ["USER", "ADMIN"],
+              etag: "updated",
+            },
+          },
         };
 
         const client = createPersonaClient(config);
-        const result = await client.updateUserRoles("user-1", [
-          "USER",
-          "ADMIN",
-        ]);
+        const result = await client.updateUserRoles(
+          "user-1",
+          ["USER", "ADMIN"],
+          '"roles-test"',
+        );
 
         expect(result.success).to.equal(true);
         if (result.success) {
-          expect(result.data.updatedCount).to.equal(1);
+          expect(result.data.user.roles).to.deep.equal(["USER", "ADMIN"]);
         }
 
         const call = first(fetchCalls);
@@ -133,6 +184,9 @@ void describe("PersonaClient", () => {
           "http://localhost:4005/internal/user/user-1/roles",
         );
         expect(call.init.method).to.equal("PUT");
+        expect(
+          (call.init.headers as Record<string, string>)["If-Match"],
+        ).to.equal('"roles-test"');
 
         const body = JSON.parse(call.init.body as string) as Record<
           string,
@@ -140,6 +194,38 @@ void describe("PersonaClient", () => {
         >;
         expect(body.roles).to.deep.equal(["USER", "ADMIN"]);
       });
+    });
+
+    void it("keeps its deadline active while reading a stalled response body", async () => {
+      globalThis.fetch = originalFetch;
+      let beganBody = false;
+      const server = createServer((_request, response) => {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.write("{");
+        beganBody = true;
+      });
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+      );
+      try {
+        const address = server.address();
+        if (address === null || typeof address === "string")
+          throw new Error("Missing test listener");
+        const result = await createPersonaClient({
+          ...config,
+          endpoint: `http://127.0.0.1:${String(address.port)}`,
+          timeout: 500,
+        }).getUserRoles("user-1");
+        expect(beganBody).to.equal(true);
+        expect(result.success).to.equal(false);
+        if (!result.success)
+          expect(result.error.message).to.equal("Request timed out");
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
     });
 
     void describe("revokeUserSessions", () => {
@@ -208,9 +294,15 @@ void describe("PersonaClient", () => {
       const link = await client.linkIdentityToUser("id", "user", ["USER"]);
       expect(link.success).to.equal(false);
 
-      const roles = await client.updateUserRoles("user", ["ADMIN"]);
+      const roles = await client.updateUserRoles(
+        "user",
+        ["ADMIN"],
+        '"roles-test"',
+      );
       expect(roles.success).to.equal(false);
 
+      expect((await client.getUserRoles("user")).success).to.equal(false);
+      expect((await client.lookupUserRoles(["user"])).success).to.equal(false);
       const revoke = await client.revokeUserSessions("user");
       expect(revoke.success).to.equal(false);
     });

@@ -12,11 +12,32 @@ public sealed partial class PersonaDbContext : DbContext
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Native publishing generates the EF compiled model and query interceptors; the native contract suite exercises them.")]
     public PersonaDbContext(DbContextOptions<PersonaDbContext> options) : base(options) { }
 
+    public DbSet<UserRow> User => Set<UserRow>();
+    public DbSet<UserRoleRow> UserRole => Set<UserRoleRow>();
     public DbSet<IdentityRow> Identity => Set<IdentityRow>();
     public DbSet<SessionRow> Session => Set<SessionRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<UserRow>(entity =>
+        {
+            entity.ToTable("user");
+            entity.HasKey(row => new { row.TenantId, row.Id });
+            entity.Property(row => row.TenantId).HasColumnName("tenant_id");
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.RoleVersion).HasColumnName("role_version");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+        });
+        modelBuilder.Entity<UserRoleRow>(entity =>
+        {
+            entity.ToTable("user_role");
+            entity.HasKey(row => new { row.TenantId, row.UserId, row.Role });
+            entity.Property(row => row.TenantId).HasColumnName("tenant_id");
+            entity.Property(row => row.UserId).HasColumnName("user_id");
+            entity.Property(row => row.Role).HasColumnName("role");
+            entity.HasOne<UserRow>().WithMany().HasForeignKey(row => new { row.TenantId, row.UserId }).HasPrincipalKey(row => new { row.TenantId, row.Id }).OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<IdentityRow>(entity =>
         {
             entity.ToTable("identity");
@@ -29,10 +50,10 @@ public sealed partial class PersonaDbContext : DbContext
             entity.Property(row => row.Name).HasColumnName("name");
             entity.Property(row => row.ProfileImageUrl).HasColumnName("profile_image_url");
             entity.Property(row => row.UserId).HasColumnName("user_id");
-            entity.Property(row => row.Roles).HasColumnName("roles");
             entity.Property(row => row.Metadata).HasColumnName("metadata");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne<UserRow>().WithMany().HasForeignKey(row => new { row.TenantId, row.UserId }).HasPrincipalKey(row => new { row.TenantId, row.Id }).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<SessionRow>(entity =>
         {
@@ -47,7 +68,7 @@ public sealed partial class PersonaDbContext : DbContext
             entity.Property(row => row.IpAddress).HasColumnName("ip_address");
             entity.Property(row => row.UserAgent).HasColumnName("user_agent");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
-            entity.HasOne<IdentityRow>().WithMany().HasForeignKey(row => row.IdentityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<IdentityRow>().WithMany().HasForeignKey(row => new { row.IdentityId, row.TenantId }).HasPrincipalKey(row => new { row.Id, row.TenantId }).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

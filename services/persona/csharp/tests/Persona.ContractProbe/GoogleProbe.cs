@@ -1,3 +1,4 @@
+using Persona.Kernel;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -32,10 +33,10 @@ internal static class GoogleProbe
             if (mode == "multiple-audiences") claims["aud"] = new JsonArray(JsonValue.Create(client), JsonValue.Create("other-client"));
             if (mode == "party") claims["azp"] = "other-client";
             var header = new JsonObject { ["alg"] = "RS256", ["kid"] = mode == "rotated" ? "rotated-key" : "fixture-key" };
-            var input = Tokens.Encode(Encoding.UTF8.GetBytes(header.ToJsonString())) + "." + Tokens.Encode(Encoding.UTF8.GetBytes(claims.ToJsonString()));
+            var input = Base64Url.Encode(Encoding.UTF8.GetBytes(header.ToJsonString())) + "." + Base64Url.Encode(Encoding.UTF8.GetBytes(claims.ToJsonString()));
             var signature = (mode == "rotated" ? rotatedKey : key).SignData(Encoding.ASCII.GetBytes(input), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             if (mode == "signature") signature[0] ^= 1;
-            return input + "." + Tokens.Encode(signature);
+            return input + "." + Base64Url.Encode(signature);
         }
         using var handler = new FixtureHandler(request =>
         {
@@ -54,7 +55,7 @@ internal static class GoogleProbe
                 "/keys" => new JsonObject { ["keys"] = new JsonArray(new JsonObject
                 {
                     ["kty"] = "RSA", ["use"] = "sig", ["alg"] = "RS256", ["kid"] = mode == "rotated" ? "rotated-key" : "fixture-key",
-                    ["n"] = Tokens.Encode(currentKey.Modulus!), ["e"] = Tokens.Encode(currentKey.Exponent!)
+                    ["n"] = Base64Url.Encode(currentKey.Modulus!), ["e"] = Base64Url.Encode(currentKey.Exponent!)
                 }) },
                 "/token" => new JsonObject { ["access_token"] = "provider-access", ["token_type"] = "Bearer", ["id_token"] = Token() },
                 _ => throw new InvalidOperationException("Unexpected Google fixture URL")
@@ -64,7 +65,7 @@ internal static class GoogleProbe
         var google = GoogleOAuth.Create(new GoogleOptions(client, "test-secret", "https://persona.example.test/auth/google/callback"), http);
         var url = await google.Authorize("test-state", "test-nonce", "test-verifier", CancellationToken.None);
         check(url.StartsWith(issuer + "/authorize?", StringComparison.Ordinal), "Google authorization endpoint");
-        check(url.Contains("code_challenge=" + Tokens.Encode(SHA256.HashData("test-verifier"u8)))
+        check(url.Contains("code_challenge=" + Base64Url.Encode(SHA256.HashData("test-verifier"u8)))
             && url.Contains("code_challenge_method=S256") && url.Contains("scope=openid%20email%20profile"), "Google PKCE and scope");
         var callback = new Uri("https://persona.example.test/auth/google/callback?code=test-code&state=test-state");
         var result = await google.Exchange(callback, "test-verifier", "test-state", "test-nonce", CancellationToken.None);

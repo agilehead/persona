@@ -3,13 +3,13 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
-using Persona.AdapterRuntime;
+using Persona.Kernel;
 
 namespace Persona.AdapterHttp;
 
 public static class Http
 {
-    public static bool SessionOriginAllowed(HttpContext context, Settings settings)
+    public static bool SessionOriginAllowed(HttpContext context, HttpSettings settings)
     {
         var origin = context.Request.Headers.Origin;
         // CORS alone only controls reading the response. Check before parsing or
@@ -65,7 +65,7 @@ public static class Http
         if (body is not (JsonObject or JsonArray)) throw new JsonException("JSON body must be an object or array");
         return body;
     }
-    public static string? Tenant(HttpContext context, Settings settings, out string? error)
+    public static string? Tenant(HttpContext context, HttpSettings settings, out string? error)
     {
         error = null;
         if (settings.TenantMode == "single")
@@ -79,7 +79,7 @@ public static class Http
         { error = "invalid tenant"; return null; }
         return tenant.ToString();
     }
-    public static CookieOptions Cookies(Settings settings, int? lifetime = null, bool access = false) => new()
+    public static CookieOptions Cookies(HttpSettings settings, int? lifetime = null, bool access = false) => new()
     {
         HttpOnly = true, Secure = settings.Production, SameSite = settings.Production ? SameSiteMode.None : SameSiteMode.Lax,
         Path = "/", Domain = (access ? settings.AccessCookieDomain : settings.CookieDomain) is { Length: > 0 } domain ? domain : null,
@@ -87,27 +87,16 @@ public static class Http
         Expires = lifetime is { } ttl ? DateTimeOffset.UtcNow.AddSeconds(ttl) : null
     };
     public static string? Refresh(HttpContext context, JsonNode? body) => context.Request.Cookies.TryGetValue("refresh_token", out var token) ? token : Text(body, "refreshToken");
-    public static void SetTokens(HttpContext context, Settings settings, string access, string refresh, int lifetime)
+    public static void SetTokens(HttpContext context, HttpSettings settings, string access, string refresh, int lifetime)
     {
         context.Response.Cookies.Append("access_token", access, Cookies(settings, lifetime, access: true));
         context.Response.Cookies.Append("refresh_token", refresh, Cookies(settings, lifetime));
-        ClearSharedCookie(context, settings, "refresh_token");
     }
-    // Invalidate a former application-wide cookie when its owner now uses a
-    // narrower scope. Otherwise the browser can retain both same-name cookies.
-    public static void ClearSharedCookie(HttpContext context, Settings settings, string name)
-    {
-        if (settings.AccessCookieDomain is not { Length: > 0 } accessDomain
-            || string.Equals(accessDomain.TrimStart('.'), settings.CookieDomain?.TrimStart('.'), StringComparison.OrdinalIgnoreCase))
-            return;
-        context.Response.Cookies.Delete(name, Cookies(settings, access: true));
-    }
-    public static void ClearCookie(HttpContext context, Settings settings, string name)
+    public static void ClearCookie(HttpContext context, HttpSettings settings, string name)
     {
         context.Response.Cookies.Delete(name, Cookies(settings));
-        ClearSharedCookie(context, settings, name);
     }
-    public static void ClearTokens(HttpContext context, Settings settings)
+    public static void ClearTokens(HttpContext context, HttpSettings settings)
     {
         context.Response.Cookies.Delete("access_token", Cookies(settings, access: true));
         ClearCookie(context, settings, "refresh_token");

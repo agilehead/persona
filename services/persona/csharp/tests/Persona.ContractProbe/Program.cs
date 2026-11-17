@@ -25,6 +25,12 @@ var identities = Persona.AdapterSqlite.Identities.Identities.Create(db, clock);
 var sessions = Persona.AdapterSqlite.Sessions.Sessions.Create(db, clock);
 var tokens = Tokens.Create(sessions, clock, "probe-secret", "15m", "7d");
 var ct = CancellationToken.None;
+var authority = Persona.AdapterSqlite.Identities.Roles.Create(db, clock);
+async Task<Result<RoleUpdate>> ReplaceRoles(string tenant, string user, string[] roles) {
+ var current = await authority.Lookup(tenant, [user], ct);
+ if (!current.IsSuccess) return Result<RoleUpdate>.Failed(current.Error!);
+ return await authority.Replace(tenant, user, roles, current.Value[0].Version ?? "missing", ct);
+}
 using var metadata = JsonDocument.Parse("{\"verified\":true,\"name\":\"東京\"}");
 var input = new NewIdentity("probe-tenant", "google", "provider-user", "user@example.test", "Name 東京", null, metadata.RootElement.Clone());
 var identity = await identities.Create(input, ct);
@@ -35,7 +41,7 @@ Check(db.ChangeTracker.Entries().Count() == 0, "failed identity write clears tra
 Check(!(await sessions.Create(new NewSession("missing", "probe-tenant", "orphan", now.AddDays(7), null, null), ct)).IsSuccess, "foreign key enforcement");
 Check(db.ChangeTracker.Entries().Count() == 0, "failed session write clears tracking before subsequent successful writes");
 var row = await db.Identity.AsNoTracking().FirstAsync(value => value.Id == identity.Value.Id, ct);
-Check(row.CreatedAt == "2026-10-25T12:00:00.000Z" && row.UpdatedAt == row.CreatedAt && row.Roles is null, "stored identity timestamp and null roles");
+Check(row.CreatedAt == "2026-10-25T12:00:00.000Z" && row.UpdatedAt == row.CreatedAt, "stored identity timestamp and null roles");
 Check(row.Metadata == metadata.RootElement.GetRawText() && row.Name == "Name 東京" && row.ProfileImageUrl is null, "stored JSON, unicode and null representations");
 Check((await identities.FindById(identity.Value.Id, ct)).Value?.Id == identity.Value.Id, "identity ID lookup");
 Check((await identities.FindByProvider("probe-tenant", "google", "provider-user", ct)).Value?.Id == identity.Value.Id, "provider lookup");
@@ -43,19 +49,19 @@ Check((await identities.FindByProvider("other", "google", "provider-user", ct)).
 Check((await identities.FindByEmail("probe-tenant", "user@example.test", ct)).Value?.Id == identity.Value.Id, "email lookup");
 Check((await identities.FindByEmail("other", "user@example.test", ct)).Value is null, "email tenant isolation");
 Check((await identities.FindById("missing", ct)).Value is null, "missing identity");
-var linked = await identities.Link(identity.Value.Id, "probe-user", ["USER", "ADMIN"], ct);
-Check(linked.IsSuccess && linked.Value?.UserId == "probe-user" && linked.Value.Roles.SequenceEqual(["USER", "ADMIN"]), "identity linking");
+var linked = await identities.Link("probe-tenant", identity.Value.Id, "probe-user", ["USER", "ADMIN"], ct);
+Check(linked.IsSuccess && linked.Value?.UserId == "probe-user" && linked.Value.Roles.SequenceEqual(["ADMIN", "USER"]), "identity linking");
 row = await db.Identity.AsNoTracking().FirstAsync(value => value.Id == identity.Value.Id, ct);
-Check(row.Roles == "USER,ADMIN", "CSV roles representation");
+Check((await db.UserRole.AsNoTracking().Where(value=>value.TenantId=="probe-tenant"&&value.UserId=="probe-user").CountAsync(ct))==2, "normalized roles have one membership row each");
 Check((await identities.FindByUserId("probe-tenant", "probe-user", ct)).Value?.Id == identity.Value.Id, "user lookup");
 Check((await identities.FindByUserId("other", "probe-user", ct)).Value is null, "user tenant isolation");
-Check((await identities.UpdateRoles("other", "probe-user", ["OTHER"], ct)).Value == 0, "role update tenant isolation");
-Check((await identities.UpdateRoles("probe-tenant", "probe-user", ["MODERATOR"], ct)).Value == 1, "role update count");
+Check((await ReplaceRoles("other", "probe-user", ["OTHER"])).Error?.Code == "NOT_FOUND", "role update tenant isolation");
+Check((await ReplaceRoles("probe-tenant", "probe-user", ["MODERATOR"])).Value.User.Roles.SequenceEqual(["MODERATOR"]), "role update count");
 var generated = await tokens.Generate(linked.Value!, "127.0.0.1", "probe-agent", ct);
 Check(generated.IsSuccess && generated.Value.RefreshToken.Length == 64 && generated.Value.RefreshToken.All(char.IsAsciiHexDigitLower), "refresh token entropy format");
 var claims = tokens.Verify(generated.Value.AccessToken);
 Check(claims.IsSuccess && claims.Value.GetProperty("tenant").GetString() == "probe-tenant"
-    && claims.Value.GetProperty("roles")[1].GetString() == "ADMIN", "signed JWT claims");
+    && claims.Value.GetProperty("roles").EnumerateArray().Select(value=>value.GetString()).SequenceEqual(["ADMIN", "USER"]), "signed JWT claims");
 Check(claims.Value.GetProperty("exp").GetInt64() - claims.Value.GetProperty("iat").GetInt64() == 900, "JWT lifetime");
 var session = await tokens.ValidateRefresh(generated.Value.RefreshToken, ct);
 Check(session.IsSuccess && session.Value.IdentityId == identity.Value.Id && session.Value.IpAddress == "127.0.0.1" && session.Value.UserAgent == "probe-agent", "refresh session");
@@ -86,7 +92,7 @@ Check(tokens.Verify(valid).IsSuccess, "fresh JWT accepted");
 Check(!Tokens.Verify(valid, "wrong", now).IsSuccess, "wrong JWT signature rejected");
 Check(!tokens.Verify("a.b.c").IsSuccess && !tokens.Verify("bad").IsSuccess, "malformed JWT rejected");
 var pair = valid.Split('.');
-var unsigned = Tokens.Encode("{\"alg\":\"none\"}"u8) + "." + pair[1] + ".";
+var unsigned = Base64Url.Encode("{\"alg\":\"none\"}"u8) + "." + pair[1] + ".";
 Check(!tokens.Verify(unsigned).IsSuccess, "unsigned JWT rejected");
 Check(Tokens.Lifetime("90d") == 7776000 && tokens.AccessLifetime == 900 && tokens.RefreshLifetime == 604800, "configured lifetimes");
 Check(DevUsers.Resolve("*:pw", "production") is null && DevUsers.Resolve("*:pw", "staging") is null, "fail-closed production and unknown environments");
@@ -117,14 +123,14 @@ var oauth = await Authentication.Login(identities, tokens, "oauth-tenant", "goog
 Check(oauth.IsSuccess && oauth.Value.IsNew && oauth.Value.Identity.Email == "oauth-user@google.local", "OAuth get-or-create defaults");
 var returning = await Authentication.Login(identities, tokens, "oauth-tenant", "google", new OAuthUser("oauth-user", null, null, null, null), null, null, ct);
 Check(returning.IsSuccess && !returning.Value.IsNew && returning.Value.Identity.Id == oauth.Value.Identity.Id, "returning OAuth user");
-Check(!(await Authentication.Link(identities, tokens, "missing", "user", ["USER"], ct)).IsSuccess, "link missing identity");
+Check(!(await Authentication.Link(identities, tokens, "probe-tenant", "missing", "user", ["USER"], ct)).IsSuccess, "link missing identity");
 var second = await identities.Create(new NewIdentity("probe-tenant", "password", "other-provider", "second@example.test", null, null, null), ct);
 var otherTenant = await identities.Create(new NewIdentity("other-tenant", "google", "provider-user", "other@example.test", null, null, null), ct);
 Check(second.IsSuccess && otherTenant.IsSuccess && second.Value.Name is null && second.Value.Metadata is null,
     "optional identity values and separate tenant creation");
-Check((await identities.Link(second.Value.Id, "probe-user", ["USER"], ct)).IsSuccess
-    && (await identities.Link(otherTenant.Value.Id, "probe-user", ["OTHER"], ct)).IsSuccess, "link multiple provider identities");
-Check((await identities.UpdateRoles("probe-tenant", "probe-user", ["MODERATOR"], ct)).Value == 2
+Check((await identities.Link("probe-tenant", second.Value.Id, "probe-user", ["USER"], ct)).IsSuccess
+    && (await identities.Link("other-tenant", otherTenant.Value.Id, "probe-user", ["OTHER"], ct)).IsSuccess, "link multiple provider identities");
+Check((await ReplaceRoles("probe-tenant", "probe-user", ["MODERATOR"])).Value.User.Roles.SequenceEqual(["MODERATOR"])
     && (await identities.FindById(otherTenant.Value.Id, ct)).Value!.Roles.SequenceEqual(["OTHER"]),
     "role update covers all linked identities only in the specified tenant");
 var firstSession = await tokens.Generate((await identities.FindById(identity.Value.Id, ct)).Value!, null, null, ct);
@@ -136,6 +142,39 @@ Check((await sessions.RevokeByUser("probe-tenant", "probe-user", ct)).Value == 2
     && !(await tokens.ValidateRefresh(secondSession.Value.RefreshToken, ct)).IsSuccess
     && (await tokens.ValidateRefresh(otherSession.Value.RefreshToken, ct)).IsSuccess,
     "user session revocation covers all identities without crossing tenants");
+Check(RoleMembership.ValidUser("abcdefghijklmnopqrst") && !RoleMembership.ValidUser("abcdefghijklmnopqrstu"), "twenty-character application IDs");
+Check(RoleMembership.ValidRoles([]) && !RoleMembership.ValidRoles(["admin", "admin"]) && !RoleMembership.ValidRoles(["bad,role"]), "role set boundaries");
+var snapshot = (await authority.Lookup("probe-tenant", ["probe-user"], ct)).Value[0];
+var cleared = await authority.Replace("probe-tenant", "probe-user", [], snapshot.Version!, ct);
+Check(cleared.IsSuccess && cleared.Value.User.Roles.Length == 0, "empty roles clear all linked identities");
+Check((await authority.Replace("probe-tenant", "probe-user", ["ADMIN"], snapshot.Version!, ct)).Error?.Code == "PRECONDITION_FAILED", "stale membership rejected");
+Check((await identities.Link("other-tenant", identity.Value.Id, "cross-tenant", ["ADMIN"], ct)).Value is null, "linking enforces tenant");
+Check((await identities.Link("probe-tenant", identity.Value.Id, "probe-user", ["ADMIN"], ct)).Value!.Roles.Count == 0, "link replay does not restore revoked role");
+Check((await identities.Link("probe-tenant", identity.Value.Id, "other-user", [], ct)).Error?.Code == "IDENTITY_CONFLICT", "identity cannot be relinked");
+var stable=(await authority.Lookup("probe-tenant",["probe-user"],ct)).Value[0];
+var third=(await identities.Create(new NewIdentity("probe-tenant","github","third-provider","third@example.test",null,null,null),ct)).Value;
+var thirdLinked=await identities.Link("probe-tenant",third.Id,"probe-user",["ADMIN"],ct);
+Check(thirdLinked.IsSuccess&&thirdLinked.Value!.Roles.Count==0,"new provider cannot grant roles to an existing member");
+Check((await authority.Lookup("probe-tenant",["probe-user"],ct)).Value[0].Version==stable.Version,"identity linking preserves the role concurrency token");
+Check(await db.User.AsNoTracking().CountAsync(x=>x.TenantId=="probe-tenant"&&x.Id=="probe-user",ct)==1,"linked providers share one user owner");
+Check(!typeof(Persona.AdapterSqlite.Entities.IdentityRow).GetProperties().Any(p=>p.Name=="Roles"),"identity persistence has no role representation");
+using(var cancelled=new CancellationTokenSource()){
+ cancelled.Cancel();var rejected=false;
+ try{await authority.Replace("probe-tenant","probe-user",["ADMIN"],stable.Version!,cancelled.Token);}catch(OperationCanceledException){rejected=true;}
+ Check(rejected&&(await authority.Lookup("probe-tenant",["probe-user"],ct)).Value[0].Version==stable.Version,"cancelled membership write preserves roles and concurrency version");
+}
+var invalidLifetime=false;try{Tokens.Lifetime("nonsense");}catch(ArgumentException){invalidLifetime=true;}
+Check(invalidLifetime,"invalid token lifetime is rejected without a fallback");
+var boundarySession = await tokens.Generate((await identities.FindById(third.Id, ct)).Value!, null, null, ct);
+var boundary = (await tokens.ValidateRefresh(boundarySession.Value.RefreshToken, ct)).Value;
+now = boundary.ExpiresAt;
+Check((await tokens.ValidateRefresh(boundarySession.Value.RefreshToken, ct)).Error?.Code == "INVALID_TOKEN", "refresh expires at the exact expiry instant");
+Check(!(await sessions.ExtendExpiry(boundary.Id, now.AddDays(1), ct)).Value, "expired session cannot be revived by a delayed refresh");
+var revocable = (await tokens.Generate((await identities.FindById(third.Id, ct)).Value!, null, null, ct)).Value;
+var revocableId = (await tokens.ValidateRefresh(revocable.RefreshToken, ct)).Value.Id;
+await tokens.Revoke(revocableId, ct);
+Check(!(await sessions.ExtendExpiry(revocableId, now.AddDays(1), ct)).Value, "revoked session cannot be extended by a delayed refresh");
+await AuthenticationProbe.Run(identities, tokens, Check);
 await GoogleProbe.Run(Check);
 await GoogleRoutesProbe.Run(identities, tokens, Check);
 await SessionRoutesProbe.Run(identities, tokens, Check);

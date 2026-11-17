@@ -2,8 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
-using Persona.AdapterAuth;
-using Persona.AdapterRuntime;
+using Persona.Kernel;
 using Persona.Contracts;
 using Persona.Domain.Identities;
 using Persona.Domain.Sessions;
@@ -13,14 +12,14 @@ namespace Persona.AdapterHttp;
 
 public static partial class SessionRoutes
 {
-    public static async Task Password(HttpContext context, Settings settings, DevAuth devAuth,
+    public static async Task Password(HttpContext context, HttpSettings settings, PasswordVerifier devAuth,
         IdentityStore identities, TokenService tokens, string tenant)
     {
         var body = await Http.Body(context);
         var user = Http.Text(body, "username"); var password = Http.Text(body, "password");
         if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(password))
         { await Http.Error(context, 400, "username and password are required"); return; }
-        if (!DevUsers.Verify(devAuth, user, password))
+        if (!devAuth.Verify(user, password))
         { await Http.Error(context, 401, "Invalid username or password"); return; }
         using var metadata = JsonDocument.Parse("{}");
         var result = await Authentication.Login(identities, tokens, tenant, "password",
@@ -33,44 +32,32 @@ public static partial class SessionRoutes
             new IdentityView(value.Identity.Id, value.Identity.Email, value.Identity.Name, value.Identity.Roles, value.Identity.UserId)), PersonaJson.Default.LoginResponse);
     }
 
-    public static async Task Refresh(HttpContext context, Settings settings, IdentityStore identities, TokenService tokens)
+    public static async Task Refresh(HttpContext context, HttpSettings settings, IdentityStore identities, TokenService tokens)
     {
         var refresh = Http.Refresh(context, await Http.Body(context));
         if (refresh is null) { await Http.Error(context, 401, "No refresh token provided"); return; }
-        var validated = await tokens.ValidateRefresh(refresh, context.RequestAborted);
-        if (!validated.IsSuccess)
+        var result = await Authentication.Refresh(identities, tokens, refresh, context.RequestAborted);
+        if (!result.IsSuccess)
         {
-            Http.ClearTokens(context, settings);
-            await Http.Error(context, 401, validated.Error!.Message);
+            var invalid = result.Error!.Code is "INVALID_TOKEN" or "NOT_FOUND";
+            if (invalid) Http.ClearTokens(context, settings);
+            await Http.Error(context, invalid ? 401 : 500, invalid ? result.Error.Message : "Failed to refresh token");
             return;
         }
-        var found = await identities.FindById(validated.Value.IdentityId, context.RequestAborted);
-        if (!found.IsSuccess) { await Http.Error(context, 500, "Failed to refresh token"); return; }
-        if (found.Value is null) { await Http.Error(context, 401, "Identity not found"); return; }
-        var slid = await tokens.Slide(validated.Value.Id, context.RequestAborted);
-        if (!slid.IsSuccess) { await Http.Error(context, 401, slid.Error!.Message); return; }
-        var access = tokens.AccessToken(found.Value, validated.Value.Id);
-        Http.SetTokens(context, settings, access, refresh, tokens.RefreshLifetime);
-        await Http.Json(context, new RefreshResponse(access, tokens.AccessLifetime), PersonaJson.Default.RefreshResponse);
+        Http.SetTokens(context, settings, result.Value.AccessToken, result.Value.RefreshToken, tokens.RefreshLifetime);
+        await Http.Json(context, new RefreshResponse(result.Value.AccessToken, result.Value.ExpiresIn), PersonaJson.Default.RefreshResponse);
     }
 
-    public static async Task Logout(HttpContext context, Settings settings, TokenService tokens)
+    public static async Task Logout(HttpContext context, HttpSettings settings, TokenService tokens)
     {
-        try
-        {
-            var refresh = Http.Refresh(context, await Http.Body(context));
-            if (refresh is not null)
-            {
-                var valid = await tokens.ValidateRefresh(refresh, context.RequestAborted);
-                if (valid.IsSuccess) await tokens.Revoke(valid.Value.Id, context.RequestAborted);
-            }
-        }
-        catch (Exception error) when (error is not OperationCanceledException) { }
+        var refresh = Http.Refresh(context, await Http.Body(context));
+        var result = await Authentication.Logout(tokens, refresh, context.RequestAborted);
         Http.ClearTokens(context, settings);
+        if (!result.IsSuccess) { await Http.Error(context, 500, "Failed to revoke session"); return; }
         await Http.Json(context, new JsonObject { ["success"] = true });
     }
 
-    public static string? Ip(HttpContext context, Settings settings)
+    public static string? Ip(HttpContext context, HttpSettings settings)
     {
         if (settings.Production && context.Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded))
             return forwarded.ToString().Split(',')[^1].Trim();

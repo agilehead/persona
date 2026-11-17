@@ -4,6 +4,8 @@ import type {
   Result,
   LinkIdentityResponse,
   UpdateRolesResponse,
+  UserRolesResponse,
+  RoleLookupsResponse,
   RevokeSessionsResponse,
 } from "./types.js";
 import { failure } from "./types.js";
@@ -21,14 +23,23 @@ export type PersonaClient = {
   updateUserRoles(
     userId: string,
     roles: string[],
+    etag: string,
   ): Promise<Result<UpdateRolesResponse>>;
+  getUserRoles(userId: string): Promise<Result<UserRolesResponse>>;
+  lookupUserRoles(userIds: string[]): Promise<Result<RoleLookupsResponse>>;
 
   /** Revoke all sessions for a user */
   revokeUserSessions(userId: string): Promise<Result<RevokeSessionsResponse>>;
 };
 
 export function createPersonaClient(config: PersonaConfig): PersonaClient {
-  const { endpoint, internalSecret, tenantId, timeout, logger } = config;
+  const {
+    endpoint,
+    internalSecret,
+    tenantId,
+    timeout = 30_000,
+    logger,
+  } = config;
 
   return {
     async linkIdentityToUser(
@@ -51,6 +62,7 @@ export function createPersonaClient(config: PersonaConfig): PersonaClient {
     async updateUserRoles(
       userId: string,
       roles: string[],
+      etag: string,
     ): Promise<Result<UpdateRolesResponse>> {
       return internalRequest<UpdateRolesResponse>({
         endpoint,
@@ -59,6 +71,33 @@ export function createPersonaClient(config: PersonaConfig): PersonaClient {
         secret: internalSecret,
         tenantId,
         body: { roles },
+        ifMatch: etag,
+        timeout,
+        logger,
+      });
+    },
+
+    async getUserRoles(userId: string): Promise<Result<UserRolesResponse>> {
+      return internalRequest<UserRolesResponse>({
+        endpoint,
+        method: "GET",
+        path: `/internal/user/${encodeURIComponent(userId)}/roles`,
+        secret: internalSecret,
+        tenantId,
+        timeout,
+        logger,
+      });
+    },
+    async lookupUserRoles(
+      userIds: string[],
+    ): Promise<Result<RoleLookupsResponse>> {
+      return internalRequest<RoleLookupsResponse>({
+        endpoint,
+        method: "POST",
+        path: "/internal/users/role-lookups",
+        secret: internalSecret,
+        tenantId,
+        body: { userIds },
         timeout,
         logger,
       });
@@ -91,6 +130,8 @@ export function createNoOpPersonaClient(logger?: Logger): PersonaClient {
   return {
     linkIdentityToUser: notConfigured,
     updateUserRoles: notConfigured,
+    getUserRoles: notConfigured,
+    lookupUserRoles: notConfigured,
     revokeUserSessions: notConfigured,
   };
 }

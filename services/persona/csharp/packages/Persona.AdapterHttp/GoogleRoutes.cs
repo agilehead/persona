@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http;
-using Persona.AdapterAuth;
-using Persona.AdapterRuntime;
+using Persona.Kernel;
 using Persona.Domain.Identities;
 using Persona.Domain.Sessions;
 using Persona.Domain.Authentication;
@@ -10,7 +9,7 @@ namespace Persona.AdapterHttp;
 
 public static class GoogleRoutes
 {
-    public static async Task Start(HttpContext context, Settings settings, GoogleProvider google, string tenant)
+    public static async Task Start(HttpContext context, HttpSettings settings, OAuthProvider google, string tenant)
     {
         try
         {
@@ -23,11 +22,9 @@ public static class GoogleRoutes
                 context.Response.Cookies.Append("oauth_redirect", redirect, options);
             }
             else Http.ClearCookie(context, settings, "oauth_redirect");
-            foreach (var name in new[] { "oauth_state", "oauth_nonce", "oauth_code_verifier", "oauth_redirect", "oauth_tenant" })
-                Http.ClearSharedCookie(context, settings, name);
             var state = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
             var nonce = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
-            var verifier = Tokens.Encode(RandomNumberGenerator.GetBytes(32));
+            var verifier = Base64Url.Encode(RandomNumberGenerator.GetBytes(32));
             var url = await google.Authorize(state, nonce, verifier, context.RequestAborted);
             context.Response.Cookies.Append("oauth_state", state, options);
             context.Response.Cookies.Append("oauth_nonce", nonce, options);
@@ -39,7 +36,7 @@ public static class GoogleRoutes
         { context.Response.Redirect(settings.PublicUrl + "?error=oauth_failed"); }
     }
 
-    public static async Task Callback(HttpContext context, Settings settings, GoogleProvider google,
+    public static async Task Callback(HttpContext context, HttpSettings settings, OAuthProvider google,
         IdentityStore identities, TokenService tokens)
     {
         try
@@ -74,7 +71,7 @@ public static class GoogleRoutes
         { context.Response.Redirect(settings.PublicUrl + "?error=oauth_failed"); }
     }
 
-    private static string? AllowedRedirect(Settings settings, string value)
+    private static string? AllowedRedirect(HttpSettings settings, string value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var target)
             || (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps)

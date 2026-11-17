@@ -1,4 +1,9 @@
+import {
+  queries,
+  queryRows,
+} from "../../node/packages/persona-test-utils/dist/index.js";
 import assert from "node:assert/strict";
+import { roleContracts } from "./roles.mjs";
 import { createHash, createHmac } from "node:crypto";
 import {
   insertIdentity,
@@ -66,6 +71,22 @@ export async function contracts({
     assert.equal(response.status, 200);
     assert.deepEqual(response.body, { status: "ok" });
   });
+  await check(
+    "public auth configuration describes the actual enabled providers",
+    async () => {
+      const result = await request("/auth/config", undefined, {
+        method: "GET",
+      });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.body, {
+        googleEnabled: mode === "multi",
+        devLoginEnabled: mode !== "production",
+        tenantRequired: mode === "multi",
+      });
+      assert.match(result.headers.get("cache-control"), /no-store/);
+      assert.equal(result.headers.get("x-content-type-options"), "nosniff");
+    },
+  );
   await check("internal authentication", async () => {
     assert.equal(
       (
@@ -167,14 +188,6 @@ export async function contracts({
           path: ["userId"],
           message: "Too small: expected string to have >=3 characters",
         },
-        {
-          origin: "array",
-          code: "too_small",
-          minimum: 1,
-          inclusive: true,
-          path: ["roles"],
-          message: "Too small: expected array to have >=1 items",
-        },
       ],
     });
   });
@@ -226,8 +239,8 @@ export async function contracts({
         body: "{",
       },
     );
-    assert.equal(response.status, 500);
-    assert.deepEqual(await response.json(), { error: "Internal server error" });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "Malformed JSON body" });
   });
   const seededId = "contract-seeded";
   insertIdentity(database, {
@@ -246,7 +259,7 @@ export async function contracts({
     tokenHash: createHash("sha256").update(seedRefresh).digest("hex"),
     expiresAt: new Date(Date.now() + 60000).toISOString(),
   });
-  await check("refresh existing Node-format session", async () => {
+  await check("refresh a persisted session", async () => {
     const response = await request("/token/refresh", {
       refreshToken: seedRefresh,
     });
@@ -254,9 +267,10 @@ export async function contracts({
     assert.equal(response.body.expiresIn, 900);
     assert.equal(jwt(response.body.accessToken).sub, seededId);
     assert.equal(refresh(response), seedRefresh);
-    const stored = database.db
-      .prepare("SELECT expires_at FROM session WHERE id = ?")
-      .get("contract-session");
+    const stored = queryRows(
+      database.db,
+      queries("session").where({ id: "contract-session" }).select("expires_at"),
+    )[0];
     assert(
       Date.parse(stored.expires_at) > Date.now() + 6 * 86400000,
       "rolling window moves forward",
@@ -296,9 +310,10 @@ export async function contracts({
   await check(
     "session mutations reject hostile, opaque and missing cookie origins before any change",
     async () => {
-      const before = database.db
-        .prepare("SELECT * FROM session WHERE id = ?")
-        .get("contract-session");
+      const before = queryRows(
+        database.db,
+        queries("session").where({ id: "contract-session" }).select(),
+      )[0];
       for (const endpoint of [
         "/logout",
         "/token/refresh",
@@ -322,9 +337,10 @@ export async function contracts({
           assert.equal(response.status, 403);
           assert.deepEqual(response.headers.getSetCookie(), []);
           assert.deepEqual(
-            database.db
-              .prepare("SELECT * FROM session WHERE id = ?")
-              .get("contract-session"),
+            queryRows(
+              database.db,
+              queries("session").where({ id: "contract-session" }).select(),
+            )[0],
             before,
           );
         }
@@ -379,27 +395,45 @@ export async function contracts({
       tenantId,
       userId: "alice",
       email: "seeded@example.test",
-      roles: ["USER", "ADMIN"],
+      roles: ["ADMIN", "USER"],
     });
     const claims = jwt(response.body.accessToken);
     assert.equal(claims.userId, "alice");
     assert.equal(claims.name, "Name 東京");
     assert.match(response.body.refreshToken, /^[0-9a-f]{64}$/);
-    assert.equal(
-      database.db
-        .prepare("SELECT roles FROM identity WHERE id = ?")
-        .get(seededId).roles,
-      "USER,ADMIN",
+    assert.deepEqual(
+      (
+        await request("/internal/user/alice/roles" + tenant, undefined, {
+          ...auth,
+          method: "GET",
+        })
+      ).body.roles,
+      ["ADMIN", "USER"],
     );
   });
+  async function roleEtag() {
+    return (
+      await request("/internal/user/alice/roles" + tenant, undefined, {
+        ...auth,
+        method: "GET",
+      })
+    ).headers.get("etag");
+  }
   await check("role updates", async () => {
+    const etag = await roleEtag();
     const response = await request(
       "/internal/user/alice/roles" + tenant,
       { roles: ["MODERATOR"] },
-      { ...auth, method: "PUT" },
+      {
+        ...auth,
+        method: "PUT",
+        headers: { ...auth.headers, "if-match": etag },
+      },
     );
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body, { success: true, updatedCount: 1 });
+    assert.equal(response.body.success, true);
+    assert.equal(Object.hasOwn(response.body, "updatedCount"), false);
+    assert.deepEqual(response.body.user.roles, ["MODERATOR"]);
     assert.equal(
       jwt(
         (await request("/token/refresh", { refreshToken: seedRefresh })).body
@@ -409,22 +443,38 @@ export async function contracts({
     );
   });
   await check("URL encoded role arrays", async () => {
+    const etag = await roleEtag();
     const response = await fetch(url + "/internal/user/alice/roles" + tenant, {
       method: "PUT",
       headers: {
         authorization: "Bearer " + internalSecret,
         "content-type": "application/x-www-form-urlencoded",
+        "if-match": etag,
       },
       body: "roles[]=MODERATOR&roles[]=REVIEWER",
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { success: true, updatedCount: 1 });
-    assert.equal(
-      database.db
-        .prepare("SELECT roles FROM identity WHERE id = ?")
-        .get(seededId).roles,
-      "MODERATOR,REVIEWER",
+    assert.deepEqual((await response.json()).user.roles, [
+      "MODERATOR",
+      "REVIEWER",
+    ]);
+    assert.deepEqual(
+      (
+        await request("/internal/user/alice/roles" + tenant, undefined, {
+          ...auth,
+          method: "GET",
+        })
+      ).body.roles,
+      ["MODERATOR", "REVIEWER"],
     );
+  });
+  passed += await roleContracts({
+    request,
+    tenant,
+    tenantId,
+    auth,
+    seededId,
+    mode,
   });
   await check("revoke user sessions", async () => {
     const response = await request(
@@ -433,7 +483,7 @@ export async function contracts({
       { ...auth, method: "DELETE" },
     );
     assert.equal(response.status, 200);
-    assert.equal(response.body.revokedCount, 2);
+    assert.equal(response.body.revokedCount, 3);
     const rejected = await request("/token/refresh", {
       refreshToken: seedRefresh,
     });
@@ -534,19 +584,23 @@ export async function contracts({
       "name",
       "roles",
     ]);
-    const row = database.db
-      .prepare("SELECT * FROM identity WHERE id = ?")
-      .get(login.body.identity.id);
+    const row = queryRows(
+      database.db,
+      queries("identity").where({ id: login.body.identity.id }).select(),
+    )[0];
     assert.match(row.id, /^[0-9A-Za-z]{16}$/);
     assert.equal(row.metadata, "{}");
-    assert.equal(row.roles, null);
+    assert.equal(Object.hasOwn(row, "roles"), false);
     assert.equal(row.provider, "password");
     assert.equal(row.tenant_id, tenantId);
     assert.match(row.created_at, /\.\d{3}Z$/);
     const token = refresh(login);
-    const session = database.db
-      .prepare("SELECT * FROM session WHERE token_hash = ?")
-      .get(createHash("sha256").update(token).digest("hex"));
+    const session = queryRows(
+      database.db,
+      queries("session")
+        .where({ token_hash: createHash("sha256").update(token).digest("hex") })
+        .select(),
+    )[0];
     assert.equal(session.identity_id, row.id);
     assert.equal(jwt(login.body.accessToken).sessionId, session.id);
   });

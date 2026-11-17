@@ -1,3 +1,4 @@
+import { verifyBoundaries } from "./service-boundaries.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -85,3 +86,5 @@ for (const match of solution.matchAll(/<Project Path="([^"]+)"/g)) {
   assert(existsSync(join(root, match[1])), `Missing C# project: ${match[1]}`);
 }
 console.info(`${product}: Ctlflow service ownership verified`);
+
+console.info("Persona layer boundaries", await verifyBoundaries());

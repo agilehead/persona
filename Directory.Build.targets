@@ -1,3 +1,11 @@
 <Project>
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <RuntimeFrameworkVersion>11.0.0</RuntimeFrameworkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler" Condition="'$(TargetFramework)' == 'net11.0'">
+      <ILCompilerPackVersion>11.0.0</ILCompilerPackVersion>
+    </KnownILCompilerPack>
+  </ItemGroup>
   <Import Project="$(MSBuildThisFileDirectory)services/persona/csharp/build/NativeQueries.targets" />
 </Project>

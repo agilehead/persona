@@ -12,7 +12,6 @@ public sealed class IdentityRow
     public string? Name { get; set; }
     public string? ProfileImageUrl { get; set; }
     public string? UserId { get; set; }
-    public string? Roles { get; set; }
     public string? Metadata { get; set; }
     public required string CreatedAt { get; set; }
     public required string UpdatedAt { get; set; }
